@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f5f5f7">
+  <meta name="description" content="在项目对话中，与团队和 Agent 一起看见进展。">
+  <title>序言 · 项目对话</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%232b4b40'/%3E%3Cpath d='M12 12h16v5H17v11h-5z' fill='white'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-6 6M10 19H5v-5m0 5 6-6"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 5v14"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5Z"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 8V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8Z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14 5 5 5M4 20l5-1L21 7l-4-4L5 15l-1 5Z"/></symbol>
+  </defs></svg>
+  <div class="shell sidebar-hidden">
+    <aside class="sidebar" id="sidebar" aria-label="项目导航" aria-hidden="true" inert>
+      <div class="sidebar-heading"><a class="brand" href="./index.html"><span class="brand-symbol" aria-hidden="true">◧</span>序言</a><button class="icon-button" id="sidebar-close" aria-label="隐藏侧边栏" title="隐藏侧边栏"><svg><use href="#i-menu"/></svg></button></div>
+      <div class="nav-label"><span>项目</span><button class="text-button" id="manage-projects">管理</button></div>
+      <nav class="project-list" id="project-list" aria-label="项目列表"></nav>
+    </aside>
+    <button class="sidebar-backdrop" id="sidebar-backdrop" aria-label="关闭项目导航" hidden></button>
+    <main class="main">
+      <header class="chat-header">
+        <button class="icon-button" id="menu-toggle" aria-label="显示侧边栏" aria-expanded="false" aria-controls="sidebar" title="显示侧边栏"><svg><use href="#i-menu"/></svg></button>
+        <h1 id="project-title">秋季新品发布</h1>
+        <button class="members" id="members-button" aria-label="管理项目成员" aria-haspopup="dialog" aria-controls="member-dialog">3 位成员</button>
+        <button class="icon-button" id="new-chat" aria-label="开启新对话" title="开启新对话"><svg><use href="#i-edit"/></svg></button>
+      </header>
+      <section class="conversation" id="conversation" aria-label="群聊消息"><div class="message-list" id="message-list"></div></section>
+      <div class="composer-area"><div class="composer-wrap">
+        <form class="composer" id="composer">
+          <label class="sr-only" for="message-input">发送消息，输入 @序言 提问；Enter 发送，Shift + Enter 换行</label>
+          <textarea id="message-input" rows="1" placeholder="发送消息，@序言 提问"></textarea>
+          <button class="send-button" type="submit" aria-label="发送消息" disabled><svg><use href="#i-arrow"/></svg></button>
+        </form>
+      </div></div>
+    </main>
+  </div>
+  <dialog id="snapshot-dialog" aria-label="项目快照"><div class="dialog-bar"><span>项目快照</span><button class="icon-button" id="close-dialog" aria-label="关闭快照"><svg><use href="#i-close"/></svg></button></div><div id="dialog-content"></div></dialog>
+  <dialog id="project-dialog" aria-labelledby="project-manager-title">
+    <div id="project-manager-view">
+    <div class="manager-header"><div><h2 id="project-manager-title">项目管理</h2><p>整理项目，让对话保持专注。</p></div><button class="icon-button" id="close-projects" aria-label="关闭项目管理"><svg><use href="#i-close"/></svg></button></div>
+    <div class="manager-toolbar"><div class="manager-filters" role="group" aria-label="筛选项目"><button data-filter="active" aria-pressed="true">进行中</button><button data-filter="archived" aria-pressed="false">已归档</button></div><button class="text-button" id="add-project"><svg><use href="#i-plus"/></svg>新建项目</button></div>
+    <form id="project-form" class="project-form" hidden><label for="project-name" id="project-name-label">项目名称</label><div class="project-form-row"><input id="project-name" required maxlength="40" autocomplete="off" placeholder="输入项目名称"><button class="primary-button" type="submit">保存</button><button class="text-button" id="cancel-project-edit" type="button">取消</button></div><p id="project-error" class="form-error" role="alert" hidden></p></form>
+    <div id="managed-projects" class="managed-projects"></div>
+    <p class="manager-footnote" id="project-manager-feedback" role="status">本地演示 · 项目修改在刷新后重置</p>
+    </div>
+    <div id="project-context-view" hidden>
+      <div class="manager-header"><div><h2 id="project-context-title">上下文</h2><p id="context-project-name"></p></div><button class="icon-button" id="close-context" aria-label="关闭项目管理"><svg><use href="#i-close"/></svg></button></div>
+      <form id="context-form" class="context-form">
+        <p class="context-intro">开始时告诉序言项目背景。后续对话中的有价值信息，由序言自动补充和整理。</p>
+        <label class="sr-only" for="context-content">项目上下文</label>
+        <textarea id="context-content" rows="12" maxlength="10000" placeholder="写下项目的目标、背景、要求，或直接粘贴相关资料链接…"></textarea>
+        <p id="context-error" class="form-error" role="alert" hidden></p>
+        <div class="context-actions"><button class="text-button" id="cancel-context" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
+      </form>
+      <p class="manager-footnote">本次对话将使用此背景 · 刷新后重置，自动整理尚未接入</p>
+    </div>
+  </dialog>
+  <dialog id="member-dialog" aria-labelledby="member-dialog-title">
+    <div class="manager-header"><div><h2 id="member-dialog-title">群聊成员</h2><p id="member-project-title"></p></div><button class="icon-button" id="close-members" aria-label="关闭成员管理"><svg><use href="#i-close"/></svg></button></div>
+    <div class="manager-toolbar"><span class="member-count" id="member-count"></span><button class="text-button" id="add-members"><svg><use href="#i-plus"/></svg>添加成员</button></div>
+    <form class="member-picker" id="member-picker" hidden>
+      <label for="member-search">从工作空间添加</label>
+      <input id="member-search" type="search" placeholder="搜索姓名" autocomplete="off">
+      <div id="member-candidates" class="member-candidates"></div>
+      <div class="member-picker-actions"><button class="text-button" id="cancel-add-members" type="button">取消</button><button class="primary-button" id="confirm-add-members" type="submit" disabled>添加</button></div>
+    </form>
+    <div id="member-list" class="member-list"></div>
+    <div class="member-agent"><span class="avatar avatar-agent"><svg><use href="#i-spark"/></svg></span><div class="member-name">序言<small>项目 Agent</small></div><span class="member-role-label">随项目加入</span></div>
+    <p id="member-feedback" class="manager-footnote" role="status" aria-live="polite">本地演示 · 成员修改在刷新后重置</p>
+  </dialog>
+  <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+  <script src="./project-directory.js"></script>
+  <script src="./project-members.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
