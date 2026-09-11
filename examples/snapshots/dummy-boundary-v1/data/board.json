@@ -1,0 +1,40 @@
+{
+  "title": "秋季新品发布 · 边界样例",
+  "description": "Timeline 风格模拟看板 · 验证快照与表现层",
+  "observedAt": "2026-09-11 10:00（Asia/Shanghai）",
+  "simulated": true,
+  "members": [
+    {
+      "id": "lin",
+      "name": "林安（模拟）"
+    },
+    {
+      "id": "qiao",
+      "name": "乔一（模拟）"
+    },
+    {
+      "id": "lu",
+      "name": "陆遥（模拟）"
+    }
+  ],
+  "items": [
+    {
+      "id": "edge-1",
+      "title": "没有排期与负责人的事项",
+      "date": null,
+      "ownerId": null,
+      "status": "待执行",
+      "dependsOn": []
+    },
+    {
+      "id": "edge-2",
+      "title": "边界文本 <script>不会执行</script> & 中文、emoji 🌱：很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，很长的事项说明，",
+      "date": "2026-12-31",
+      "ownerId": "lin",
+      "status": "待发布",
+      "dependsOn": [
+        "edge-1"
+      ]
+    }
+  ]
+}

@@ -7,3 +7,10 @@ node_modules/
 dist/server/
 dist/.openai/
 *.tgz
+
+src/snapshot/generated/
+playwright-report/
+test-results/
+.backups/
+.workbuddy/
+.wrangler/

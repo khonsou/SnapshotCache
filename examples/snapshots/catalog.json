@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1",
+  "entries": [
+    {
+      "key": "launch",
+      "title": "秋季新品发布",
+      "label": "正常数据",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "launch"
+      },
+      "ref": {
+        "snapshotId": "dummy-launch-v1",
+        "manifestHash": "sha256:be44fd2948a905942c1c4f09d838522a360d6bf3036a626a00ad5bab74278cf4"
+      }
+    },
+    {
+      "key": "brand",
+      "title": "品牌体验升级",
+      "label": "正常数据",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "brand"
+      },
+      "ref": {
+        "snapshotId": "dummy-brand-v1",
+        "manifestHash": "sha256:26d43bc0fdcc6c9352c161a68a7d5566ef4ff05a02f04d58590890467697c041"
+      }
+    },
+    {
+      "key": "research",
+      "title": "用户研究室",
+      "label": "正常数据",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "research"
+      },
+      "ref": {
+        "snapshotId": "dummy-research-v1",
+        "manifestHash": "sha256:e9aa704deb17284aaaf1e60c208a855899d859e7ff8e9ccdb321ffb26bda847d"
+      }
+    },
+    {
+      "key": "empty",
+      "title": "秋季新品发布 · 空数据样例",
+      "label": "空数据",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "launch"
+      },
+      "ref": {
+        "snapshotId": "dummy-empty-v1",
+        "manifestHash": "sha256:f629b7a895e5d836d65a4cfddd12f2b2a5c3e797323a3653042abf541fa08022"
+      }
+    },
+    {
+      "key": "boundary",
+      "title": "秋季新品发布 · 边界样例",
+      "label": "边界数据",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "launch"
+      },
+      "ref": {
+        "snapshotId": "dummy-boundary-v1",
+        "manifestHash": "sha256:ffe10314b51341c88cb994db505460ee163b813dad8964c5e68754a92ea301e3"
+      }
+    },
+    {
+      "key": "filtered",
+      "title": "秋季新品发布",
+      "label": "保存的筛选状态",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "launch"
+      },
+      "ref": {
+        "snapshotId": "dummy-filtered-v1",
+        "manifestHash": "sha256:af3a9708ea6292ffc7a0f550a0f71374bad931abe65d5ef1c4585636d0590a12"
+      }
+    },
+    {
+      "key": "mixed",
+      "title": "混合资源报告",
+      "label": "CSV 与二进制",
+      "scope": {
+        "tenantId": "fixture-workspace",
+        "projectId": "launch"
+      },
+      "ref": {
+        "snapshotId": "dummy-mixed-v1",
+        "manifestHash": "sha256:c0e7cdbcd55e62d2e1505286c1c572277634deb4895416c0c8062e90294c7d8b"
+      }
+    }
+  ],
+  "defaults": {
+    "launch": "dummy-launch-v1",
+    "brand": "dummy-brand-v1",
+    "research": "dummy-research-v1"
+  },
+  "variants": {
+    "launch": "dummy-launch-v1",
+    "empty": "dummy-empty-v1",
+    "boundary": "dummy-boundary-v1",
+    "filtered": "dummy-filtered-v1",
+    "mixed": "dummy-mixed-v1"
+  }
+}

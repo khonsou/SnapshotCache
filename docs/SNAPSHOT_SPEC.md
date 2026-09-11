@@ -1,6 +1,8 @@
-# 快照数据协议 v1 · 设计稿
+# 快照数据协议 v1
 
-状态：文字设计稿，供产品与工程确认，尚未接入当前 Demo。机器可读 Schema 和完整示例仍待补齐。本文定义外层数据协议，不限定业务数据模型或视觉模板。
+状态：P1 已落实不可变包、机器可读 Schema、7 个完整样例及通用校验／viewer。缓存目录、active、TTL 等后续记录仍为设计，尚未实现。本文定义外层数据协议，不限定业务数据模型或视觉模板。
+
+实现契约：`contracts/snapshot.schema.json`；当前 web/1 支持范围与绑定 API 见 [VIEWER_PROTOCOL.md](VIEWER_PROTOCOL.md)。
 
 ## 1. 核心决定
 
@@ -31,7 +33,7 @@ Snapshot
 
 ## 2. 快照的正式结构
 
-后续机器可读 Schema 的根定义拟为 `SnapshotManifest`；其他记录放在同一文件的 `$defs` 中。下文约束与届时的 Schema 一起构成协议，跨文件引用、内容校验和状态转换不能只靠 JSON Schema 验证。
+机器可读 Schema 的根定义为 SnapshotManifest，QueryContext 与 MessageSnapshotRef 在同文件 `$defs` 中。包外缓存记录留待 P4。下文约束与 Schema 一起构成协议，跨文件引用、内容校验和状态转换不能只靠 JSON Schema 验证。
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
@@ -114,7 +116,7 @@ v1 Agent 生成页面默认在独立隔离环境执行。包内内容不能自�
 
 回放模式禁止依赖未冻结的远程业务请求。更改数据的按钮只能向宿主提交动作意图，经宿主授权后执行；不得在旧快照内部悄悄更新结果。iframe 的网络限制需要 CSP/资源网关配合，不能仅依靠 sandbox。
 
-资源装载、消息桥和动作 API 属于后续 viewer 接口协议；不能把未定义的桥接调用当作当前已具备的能力。v1 包可先使用自包含 HTML；动态模块必须等 viewer 明确支持后接入。
+P1 资源装载与数据绑定接口见 VIEWER_PROTOCOL.md，支持自包含 HTML 与只读字节 API。动作 API 尚未实现；动态模块与多文件代码依赖必须等 viewer 明确支持后接入。
 
 ## 5. 查询身份：哪些条件相同才可复用
 
@@ -242,6 +244,6 @@ Schema 校验通过只表示外层形状合规，不代表业务结论正确、�
 
 先不引入多运行时、增量／差分包、表现层模板注册中心和复杂权限声明。以后可在保持包外引用和缓存模型稳定的前提下扩展。未知主版本拒绝读取；命名空间扩展可以忽略，但不得改变安全边界、hash 算法或已定义字段语义。
 
-后续补充一个混合数据样例：JSON 指标 + Markdown 说明 + 一个静态 H5 表现层。示例文件的 hash 与大小须来自实际内容，不使用占位 hash。
+P1 已补充 JSON + Markdown + H5、空与边界数据、独立初始状态，以及 CSV + 二进制 + Markdown + H5 样例。全部位于 examples/snapshots，hash 与大小来自真实文件，通过 npm run fixtures:verify 核验。
 
 依据：[RFC 8785 / JCS](https://www.rfc-editor.org/rfc/rfc8785.html) 定义规范化字节；[JSON Schema 2020-12](https://json-schema.org/draft/2020-12) 定义外层校验格式；[MDN iframe](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe) 说明页面隔离限制。其余字段和状态模型是本项目的设计提案。

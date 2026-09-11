@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>项目安排快照</title>
+<style>
+:root{color-scheme:light;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;color:#24262b;font-size:16px;background:white}*{box-sizing:border-box}body{margin:0;padding:20px 22px}button,input,select{font:inherit;color:inherit}button{cursor:pointer}h1{font-size:18px;margin:0 0 6px;line-height:1.5}p{margin:0;line-height:1.7}.muted{font-size:14px;color:#737985}.stats{display:flex;gap:26px;padding:22px 0}.stats strong{display:block;font-size:24px;font-weight:550;line-height:1.5}.stats span{font-size:14px;color:#737985}.tabs{display:flex;gap:6px;border-bottom:1px solid #e9eaed;margin-bottom:18px}.tabs button{border:0;background:white;padding:10px 12px;font-size:14px;color:#737985;border-bottom:2px solid transparent}.tabs button[aria-selected=true]{color:#3e526f;border-bottom-color:#526781}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #526781;outline-offset:3px}.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;align-items:center;font-size:14px}.filters select,.filters input{border:1px solid #e1e4e9;border-radius:6px;background:white;padding:7px 8px;max-width:100%}.filters input{width:150px}.item{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:start;padding:14px 0;border-top:1px solid #eef0f3}.date{color:#737985;font-size:14px;font-variant-numeric:tabular-nums}.item strong{font-size:15px;font-weight:500;overflow-wrap:anywhere}.item small{display:block;font-size:13px;color:#737985;margin-top:5px;line-height:1.6}.state{font-size:13px;white-space:nowrap;background:#f2f3f6;color:#606c7f;border-radius:4px;padding:4px 6px}.group{padding:14px 0;border-top:1px solid #eef0f3;font-size:15px;display:flex;justify-content:space-between}.count{font-size:13px;color:#737985;margin:8px 0 0}.empty{padding:32px 12px;text-align:center;color:#737985;font-size:14px;background:#f7f8fa;border-radius:6px}.note{font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.85}.footer{font-size:12px;color:#8b919b;border-top:1px solid #e9eaed;padding-top:14px;margin-top:20px}details{font-size:13px;color:#737985;margin-top:7px}summary{cursor:pointer}[hidden]{display:none!important}@media(max-width:420px){body{padding:16px}.item{grid-template-columns:48px 1fr;gap:8px}.state{grid-column:2;justify-self:start}.stats{gap:18px}.filters{gap:8px}.filters input{width:120px}}
+</style>
+</head>
+<body>
+<header><h1 id="title"></h1><p class="muted" id="subtitle"></p></header>
+<div class="stats" aria-label="项目事项统计"><div><strong id="total"></strong><span>全部事项</span></div><div><strong id="done"></strong><span>已发布</span></div><div><strong id="pending"></strong><span>待推进</span></div></div>
+<div class="tabs" role="tablist" aria-label="快照视图"><button id="tab-timeline" role="tab" aria-selected="true" aria-controls="panel-timeline">时间安排</button><button id="tab-status" role="tab" aria-selected="false" aria-controls="panel-status" tabindex="-1">状态分布</button><button id="tab-brief" role="tab" aria-selected="false" aria-controls="panel-brief" tabindex="-1">项目说明</button></div>
+<section id="panel-timeline" role="tabpanel" aria-labelledby="tab-timeline">
+<div class="filters"><label>状态 <select id="status"><option value="">全部状态</option></select></label><label>负责人 <select id="owner"><option value="">全部负责人</option></select></label><label>搜索 <input id="search" type="search" placeholder="事项名称"></label></div>
+<div id="items"></div><p class="count" id="count" aria-live="polite"></p>
+</section>
+<section id="panel-status" role="tabpanel" aria-labelledby="tab-status" hidden><p class="muted">按事项数量统计 · 单位：项</p><div id="groups"></div></section>
+<section id="panel-brief" role="tabpanel" aria-labelledby="tab-brief" hidden><p class="note" id="brief"></p></section>
+<footer class="footer" id="source"></footer>
+<script>
+'use strict';
+const data=Snapshot.readJSON('board');
+const items=data.items;
+const q=id=>document.getElementById(id);
+const text=(id,value)=>q(id).textContent=value;
+text('title',data.title);text('subtitle',data.description);text('total',items.length);text('done',items.filter(i=>i.status==='已发布').length);text('pending',items.filter(i=>i.status!=='已发布').length);
+text('brief',Snapshot.readText('brief'));text('source','模拟数据 · 冻结于 '+data.observedAt+' · 本次筛选不修改快照');
+const statuses=[...new Set(items.map(i=>i.status))];
+const owners=[...new Map(items.map(i=>[i.ownerId,data.members.find(m=>m.id===i.ownerId)?.name||'未分配'])).entries()];
+for(const status of statuses)q('status').add(new Option(status,status));
+for(const [id,name] of owners)q('owner').add(new Option(name,id||'unassigned'));
+q('status').value=Snapshot.initialState?.status||'';
+q('owner').value=Snapshot.initialState?.owner||'';
+q('search').value=Snapshot.initialState?.search||'';
+function render(){
+ const shown=items.filter(i=>(!q('status').value||i.status===q('status').value)&&(!q('owner').value||(i.ownerId||'unassigned')===q('owner').value)&&i.title.toLocaleLowerCase().includes(q('search').value.toLocaleLowerCase()));
+ const nodes=shown.map(item=>{
+  const row=document.createElement('article');row.className='item';
+  const date=document.createElement('span');date.className='date';date.textContent=item.date?item.date.slice(5).replace('-','.'):'未排期';
+  const main=document.createElement('div');const title=document.createElement('strong');title.textContent=item.title;
+  const owner=document.createElement('small');owner.textContent=data.members.find(m=>m.id===item.ownerId)?.name||'未分配';main.append(title,owner);
+  if(item.dependsOn?.length){const details=document.createElement('details');const summary=document.createElement('summary');summary.textContent='前置事项 '+item.dependsOn.length+' 项';const content=document.createElement('p');content.textContent=item.dependsOn.map(id=>items.find(i=>i.id===id)?.title||'未知事项').join('、');details.append(summary,content);main.append(details);}
+  const state=document.createElement('span');state.className='state';state.textContent=item.status;row.append(date,main,state);return row;
+ });
+ if(!nodes.length){const empty=document.createElement('p');empty.className='empty';empty.textContent=items.length?'没有符合筛选条件的事项。':'当前快照没有事项。';nodes.push(empty);}
+ q('items').replaceChildren(...nodes);text('count','显示 '+shown.length+' / '+items.length+' 项');
+}
+for(const id of ['status','owner','search'])q(id).addEventListener('input',render);
+for(const status of statuses){const row=document.createElement('div');row.className='group';const name=document.createElement('span');name.textContent=status;const count=document.createElement('strong');count.textContent=items.filter(i=>i.status===status).length+' 项';row.append(name,count);q('groups').append(row);}
+if(!statuses.length){text('groups','当前快照没有可统计的事项。');q('groups').className='empty';}
+const tabs=['timeline','status','brief'];
+function selectTab(name){for(const key of tabs){q('tab-'+key).setAttribute('aria-selected',String(key===name));q('tab-'+key).tabIndex=key===name?0:-1;q('panel-'+key).hidden=key!==name;}}
+for(const name of tabs){q('tab-'+name).addEventListener('click',()=>selectTab(name));q('tab-'+name).addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();let index=tabs.indexOf(name);index=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;selectTab(tabs[index]);q('tab-'+tabs[index]).focus();});}
+selectTab(tabs.includes(Snapshot.initialState?.tab)?Snapshot.initialState.tab:'timeline');render();
+</script>
+</body>
+</html>

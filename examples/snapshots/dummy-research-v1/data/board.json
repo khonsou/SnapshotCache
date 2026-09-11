@@ -1,0 +1,60 @@
+{
+  "title": "用户研究室",
+  "description": "Timeline 风格模拟看板 · 验证快照与表现层",
+  "observedAt": "2026-09-11 10:00（Asia/Shanghai）",
+  "simulated": true,
+  "members": [
+    {
+      "id": "lin",
+      "name": "林安（模拟）"
+    },
+    {
+      "id": "qiao",
+      "name": "乔一（模拟）"
+    },
+    {
+      "id": "lu",
+      "name": "陆遥（模拟）"
+    }
+  ],
+  "items": [
+    {
+      "id": "task-1",
+      "title": "访谈提纲确认",
+      "date": "2026-09-08",
+      "ownerId": "lin",
+      "status": "已发布",
+      "dependsOn": []
+    },
+    {
+      "id": "task-2",
+      "title": "深度用户访谈",
+      "date": "2026-09-10",
+      "ownerId": "qiao",
+      "status": "待发布",
+      "dependsOn": [
+        "task-1"
+      ]
+    },
+    {
+      "id": "task-3",
+      "title": "整理研究发现",
+      "date": "2026-09-12",
+      "ownerId": "lu",
+      "status": "待执行",
+      "dependsOn": [
+        "task-2"
+      ]
+    },
+    {
+      "id": "task-4",
+      "title": "研究结论分享",
+      "date": "2026-09-15",
+      "ownerId": "lin",
+      "status": "待执行",
+      "dependsOn": [
+        "task-3"
+      ]
+    }
+  ]
+}

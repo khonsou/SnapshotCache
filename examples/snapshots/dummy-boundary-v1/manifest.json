@@ -1,0 +1,93 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotId": "dummy-boundary-v1",
+  "scope": {
+    "tenantId": "fixture-workspace",
+    "projectId": "launch"
+  },
+  "createdAt": "2026-09-11T02:00:00Z",
+  "query": {
+    "resourceId": "query.context",
+    "fingerprint": "sha256:50fc692ddfec4ca0ef96cdafad21710086eb81ef59eaf9fa1fe7c69d33074ead"
+  },
+  "data": {
+    "datasets": [
+      {
+        "id": "board",
+        "entryResourceId": "data.board",
+        "resourceIds": [
+          "data.board"
+        ]
+      },
+      {
+        "id": "brief",
+        "entryResourceId": "data.brief",
+        "resourceIds": [
+          "data.brief"
+        ]
+      }
+    ],
+    "contentHash": "sha256:20c8ad4e070b90cd656f66bc192d255ef68d7fe350507b74f3ad5d24e6af0d4c"
+  },
+  "presentation": {
+    "runtime": "web",
+    "runtimeVersion": "1",
+    "entryResourceId": "view.index",
+    "resourceIds": [
+      "view.index",
+      "view.state"
+    ],
+    "bindings": {
+      "board": "board",
+      "brief": "brief"
+    },
+    "initialStateResourceId": "view.state",
+    "contentHash": "sha256:a6c030aab208f912fd1b5aff50cefb4622b84e44286cf2dbb2456f6401d7bfe6"
+  },
+  "resources": [
+    {
+      "id": "data.board",
+      "path": "data/board.json",
+      "mediaType": "application/json",
+      "byteLength": 1158,
+      "sha256": "sha256:8f8279520f4f3bf4adcbae1f0360cf30b0937fb5243e2ab3b13fe9eb19d1f423"
+    },
+    {
+      "id": "data.brief",
+      "path": "data/brief.md",
+      "mediaType": "text/markdown",
+      "byteLength": 231,
+      "sha256": "sha256:0b5437556e0966d62b332d42d92861d0d17d7bd03886ed72dde562900ee4754b"
+    },
+    {
+      "id": "query.context",
+      "path": "query.json",
+      "mediaType": "application/json",
+      "byteLength": 811,
+      "sha256": "sha256:be38066cace40ff04afe38e1e9926af156aab1c9877780cf20157105765b4112"
+    },
+    {
+      "id": "view.index",
+      "path": "presentation/index.html",
+      "mediaType": "text/html",
+      "byteLength": 8016,
+      "sha256": "sha256:88910903fbef76369557c73e8ce8e136f8735c7c259c82711f22bcb8d8ce9ad8"
+    },
+    {
+      "id": "view.state",
+      "path": "presentation/state.json",
+      "mediaType": "application/json",
+      "byteLength": 54,
+      "sha256": "sha256:da486e0dfd1d3bdc578c70574550735b4c38052816bf26bc48ba94fb65cf0797"
+    }
+  ],
+  "totalResourceBytes": 10270,
+  "extensions": {
+    "com.xuyan.fixture": {
+      "simulated": true
+    }
+  },
+  "integrity": {
+    "manifestHash": "sha256:ffe10314b51341c88cb994db505460ee163b813dad8964c5e68754a92ea301e3"
+  }
+}

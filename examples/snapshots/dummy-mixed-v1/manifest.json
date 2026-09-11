@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotId": "dummy-mixed-v1",
+  "scope": {
+    "tenantId": "fixture-workspace",
+    "projectId": "launch"
+  },
+  "createdAt": "2026-09-11T02:00:00Z",
+  "query": {
+    "resourceId": "query.context",
+    "fingerprint": "sha256:8acdfd515a3d6092545902b24bbb68cf9b089a8d5dfe124248b5446f5140642a"
+  },
+  "data": {
+    "datasets": [
+      {
+        "id": "binary",
+        "entryResourceId": "data.binary",
+        "resourceIds": [
+          "data.binary"
+        ]
+      },
+      {
+        "id": "brief",
+        "entryResourceId": "data.brief",
+        "resourceIds": [
+          "data.brief"
+        ]
+      },
+      {
+        "id": "measurements",
+        "entryResourceId": "data.csv",
+        "resourceIds": [
+          "data.csv"
+        ]
+      }
+    ],
+    "contentHash": "sha256:9c6c004dc31024f6ab72325915ced3270d83fe0cebdfefffa231fd3b2d4c9b7a"
+  },
+  "presentation": {
+    "runtime": "web",
+    "runtimeVersion": "1",
+    "entryResourceId": "view.index",
+    "resourceIds": [
+      "view.index"
+    ],
+    "bindings": {
+      "measurements": "measurements",
+      "binary": "binary",
+      "brief": "brief"
+    },
+    "contentHash": "sha256:ba7d0bbe093a67f35b00af487921809cf4b46071ec8727388568169c70645e8a"
+  },
+  "resources": [
+    {
+      "id": "data.binary",
+      "path": "data/raw.bin",
+      "mediaType": "application/octet-stream",
+      "byteLength": 6,
+      "sha256": "sha256:a1d8748d0dbe0c9f4f6769346e7b14f8c57cbd636ef40dd40a21b96d7e78aa39"
+    },
+    {
+      "id": "data.brief",
+      "path": "data/brief.md",
+      "mediaType": "text/markdown",
+      "byteLength": 119,
+      "sha256": "sha256:e10351afac9593c021f5c578a5a9c4d345c273aa0078b95fcd3d4978c5679edc"
+    },
+    {
+      "id": "data.csv",
+      "path": "data/measurements.csv",
+      "mediaType": "text/csv",
+      "byteLength": 43,
+      "sha256": "sha256:69927f2946af32add1fe8bffd48843186773b0e6096eb7a2da27054cb62d0aa6"
+    },
+    {
+      "id": "query.context",
+      "path": "query.json",
+      "mediaType": "application/json",
+      "byteLength": 346,
+      "sha256": "sha256:b51e3ff417cfa65b489ba91e3075ca33b0152cc6240990d95a347492ce45c530"
+    },
+    {
+      "id": "view.index",
+      "path": "presentation/report.html",
+      "mediaType": "text/html",
+      "byteLength": 990,
+      "sha256": "sha256:3907105a2595309b989e24045de02869b99cb373ae648022a34dcc1801247880"
+    }
+  ],
+  "totalResourceBytes": 1504,
+  "extensions": {
+    "com.xuyan.fixture": {
+      "simulated": true
+    }
+  },
+  "integrity": {
+    "manifestHash": "sha256:c0e7cdbcd55e62d2e1505286c1c572277634deb4895416c0c8062e90294c7d8b"
+  }
+}

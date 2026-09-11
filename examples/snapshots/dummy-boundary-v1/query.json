@@ -1,0 +1,36 @@
+{
+  "identity": {
+    "intent": {
+      "name": "fixture.project-overview",
+      "version": "1"
+    },
+    "parameters": {
+      "project": "launch",
+      "variant": "boundary"
+    },
+    "contextHash": null,
+    "authorization": {
+      "scopeHash": "sha256:c915e91462bb95eb3e899e37a395aa5bfde3d958fe805efa751c3158d90aa9a5",
+      "policyVersion": "fixture-1"
+    },
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai",
+    "sourceSelections": [
+      {
+        "sourceId": "local-dummy",
+        "revision": "1"
+      }
+    ],
+    "presentationRequest": {
+      "view": "project-overview"
+    }
+  },
+  "observations": [
+    {
+      "sourceId": "local-dummy",
+      "revision": "1",
+      "observedAt": "2026-09-11T02:00:00Z"
+    }
+  ],
+  "originalText": "查看本项目当前安排（模拟输入）"
+}
