@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1789133315818,
+      "tag": "0000_last_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789133375371,
+      "tag": "0001_flashy_doctor_spectrum",
+      "breakpoints": true
+    }
+  ]
+}

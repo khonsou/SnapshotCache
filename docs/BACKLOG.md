@@ -1,30 +1,67 @@
 # 研发任务
 
-顺序已确定：P1 快照与表现层 → P2 Agent 动态生成 → P3 Timeline 真实项目 → P4 缓存。
+更新日期：2026-09-12
 
-## P1
+当前顺序已确认：**GUI → 快照协议 → 模型接入 → 自由对话生成快照 → Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云生产发布 → 持久化与缓存优化。**
 
-- BASE-01 · Review：项目总规则、源码与产物分离、构建／测试入口、实现状态与 ADR。验收：原聊天回归、可重复构建、依赖锁与本地源码检查点。
-- FIXTURE-01 · Review：7 个 dummy 包，包含正常、空、边界、独立初始状态和混合二进制。验收：所有样例可复现，来源明确为模拟。
-- SNAP-01 · Review：SnapshotManifest / QueryContext / MessageSnapshotRef 契约，数据及表现 hash。验收：所有字节、大小、引用和 hash 核对成功。
-- SNAP-02 · Review：通用校验器。验收：篡改、缺件、重复键、非法路径、错误绑定／版本／作用域等反例被拒绝。
-- VIEW-01 · Review：隔离 viewer 与通用字节绑定，保留现有群聊外壳。验收：浏览器交互、展开、重载、错误状态与边界检查通过。
-- REF-01 · Review：固定目录引用、初始状态子快照及不可覆盖写包。验收：选择新包创建新消息，旧引用和字节保持不变。
+首发允许无缓存、无跨会话持久化；不得因此放宽真实身份、项目授权、数据来源、快照完整性或 viewer 隔离要求。详细范围见 `docs/PRODUCTION_RELEASE_PLAN_2026-09-12.md` 和 ADR-0003。
 
-每项负责人：当前开发任务；需求来源：DEVELOPMENT_PLAN P1、SNAPSHOT_SPEC。技术证据归档于 docs/testing/P1_ACCEPTANCE.md；产品体验等待用户验收。状态更新以实际结果为准。
+## 已完成基线 · 1–4
 
-## P2 · Agent 动态生成快照
+- GUI-01 · Done：项目群聊、项目切换、成员和上下文入口、快照挂载、移动端与键盘基础交互。后续只做真实数据替换和发布回归。
+- SNAP-01 · Done：统一 SnapshotManifest / QueryContext / MessageSnapshotRef、任意 MIME 数据、真实字节 hash、通用校验器和隔离 viewer；7 个 dummy fixture 仅用于回归。
+- MODEL-01 · Done：DeepSeek 文本模型代理、服务端密钥、输入限制、错误处理与普通对话回归。
+- GEN-01 · Review：文本／快照意图分流、严格 SnapshotDraft、一次修复、服务端受信字段、动态展示和失败收敛已通过本地自动测试；普通文本和一类工具快照已通过真实模型最小调用，待第二种表现及空／边界／修复样本和产品复核后冻结。
+- STORE-PROTOTYPE · Parked：D1/R2、Drizzle、run、目录及刷新回放已形成可选原型；不再作为首发前置，未来存储选型时复用其接口和测试经验。
 
-- P2-00 · Doing：冻结 P1 基线，接受 P2 架构决策，建立可恢复检查点。验收：P1 全量回归通过，P1/P2 差异清晰。
-- P2-01 · Ready：模型适配、按需意图、SnapshotDraft 结构化契约与一次修复。验收：固定样本可解析，服务端字段不可由模型覆盖，纯文本回归通过。
-- P2-02 · Ready：Sites D1／R2、最小目录、不可变对象和动态读取路由。验收：确定性候选可提交、刷新后从生成记录回放，模型离线不影响历史加载。
-- P2-03 · Ready：run 状态、幂等、预算、错误分类与 Agent 生成编排。验收：不同展示要求产生两个非预置有效包；失败候选不可见。
-- P2-04 · Ready：聊天动态引用、生成状态、重试与项目生成记录。验收：新旧引用稳定；目录失败不创建空 iframe；移动端和键盘可用。
-- P2-05 · Ready：授权、隔离、D1／R2 集成、真实模型评测与全量回归。验收：P2 计划的阻断用例全部通过，证据写入 P2_ACCEPTANCE。
+## R0 · 冻结当前基线
 
-P2 已确认：Sites Worker + D1/R2；按需生成；刷新后从项目生成记录回放，完整消息持久化留 P3。详细范围与门槛见 `docs/P2_PLAN_2026-09-11.md`。
+- R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
+- R0-02 · In progress：普通文本和一类 Timeline 工具快照已通过真实 DeepSeek；待第二种表现、空／边界、非法候选／修复和产品复核。
+- R0-03 · Done：34 项 Node、7 个 fixture、Worker 构建和 22 项 Chromium／WebKit 场景通过；真实项目路径已验证关闭 dummy 和持久化原型 UI。
 
-## 后续未开始
+## R1 · Timeline Agent Support 真实数据
 
-- P3：导入 TIMELINE_TEST_PROJECT_CONTEXT，按协议探测、鉴权、只读取数，生成真实业务快照；补齐项目与 Agent 相关能力。
-- P4：查询规范化、active CAS、TTL、并发协调、各级缓存与淘汰，整体验收。
+- TL-01 · In progress：实际 API 基址、公开 meta、protocol 19.2、能力和限额已探测；鉴权响应、真实分页、revision 和错误响应待目标密码验证。
+- TL-02 · Implemented：平台无关只读适配器与 `timeline_read_board` 工具白名单已实现；凭据、token、实例和 board 均由服务端配置，测试覆盖 401 单次重试、403 不重试、能力和过滤器拒绝。
+- TL-03 · Implemented：真实模型工具调用已接入快照流程，工具结果记录 source、protocol、revision／观察时间并作为不可信数据处理；受控模拟数据的在线模型评测通过。
+- TL-04 · Blocked：需要在服务端配置目标看板密码后，读取真实数据、验证 401/403/429/超时与字段缺失，并生成至少两类可逐字段核对的快照。
+
+R1 验收：真实 Timeline 只读数据可以稳定生成协议合规快照；没有 dummy 补数、写操作、伪造来源或秘密泄露。
+
+## R2 · 项目数据全真替换
+
+- REAL-01 · Implemented：部署级 `XUYAN_PROJECTS_JSON` 定义 project ID、标题、上下文、允许用户、Timeline 实例、board 和凭据引用；配置与代码分离并严格校验。
+- REAL-02 · In progress：配置模式会移除可见 dummy 项目／消息／成员编辑／fixture／历史入口；demo fixture 仍保留在同一构建中供无配置开发模式回归，真实成员展示待 OAuth。
+- REAL-03 · Implemented：服务端按 project ID 和可信 actor 解析项目、上下文与工具范围，忽略客户端伪造字段；越权和未知项目返回 404。
+- REAL-04 · Blocked：需要目标密码和公司身份资料后核对真实项目页面、身份、Timeline 请求与快照 provenance。
+
+R2 验收：生产目标项目不含模拟业务事实，所有业务数据和上下文都有真实配置或 Timeline 响应依据。
+
+## R3 · 公司 OAuth 与真实授权
+
+- AUTH-01 · Proposed：确认公司 OAuth/OIDC issuer、client ID、audience、redirect URI、scope、claims 和环境配置方式。
+- AUTH-02 · Proposed：完成登录、回调、session／token 校验、退出和过期处理；覆盖 state、nonce、PKCE 或适用的等价保护。
+- AUTH-03 · Proposed：建立 OAuth 用户到项目成员和 Timeline 可见范围的服务端映射；移除生产环境可伪造身份入口。
+- AUTH-04 · Proposed：覆盖未登录、过期、跨用户、跨项目、成员移出、权限撤销和敏感信息泄露反例。
+
+R3 验收：用户和项目数据全部真实，身份与授权只能由可信 OAuth 和服务端规则确定，严重越权为零。
+
+## R4–R5 · 阿里云预发布与生产首发
+
+- CLOUD-01 · Proposed：确认阿里云运行产品、网络、域名、TLS、出站策略、超时／并发、密钥托管和日志方案。
+- CLOUD-02 · Proposed：把 Cloudflare 特有入口与 D1/R2 放到可选平台适配层；首发业务链路可无状态运行。
+- CLOUD-03 · Proposed：在阿里云预发布环境跑通真实 OAuth → 真实项目 → Timeline → 模型 → 快照 → viewer。
+- RELEASE-01 · Proposed：完成配置清单、构建、健康检查、日志脱敏、回退演练和安全／真实性阻断检查。
+- RELEASE-02 · Proposed：向明确授权的内部用户小范围发布，观察失败率、延迟、模型与 Timeline 错误及 token 成本。
+
+首发验收：真实用户能在生产项目中自由对话，并从获准的 Timeline 数据生成可核对快照；页面明确说明刷新后结果可能消失。
+
+## 发布后 · 持久化与缓存
+
+- PERSIST-01 · Deferred：根据阿里云架构选择数据库／对象存储，先持久化消息引用和不可变快照，恢复刷新及跨会话回放。
+- PERSIST-02 · Deferred：持久 run、幂等恢复、失败清理、备份和恢复。
+- CACHE-01 · Deferred：查询规范化、active CAS、TTL、同查询生成协调和新鲜度。
+- CACHE-02 · Deferred：服务端／浏览器缓存、容量、隔离、淘汰和成本优化。
+
+持久化优先于缓存。选型以真实流量、响应时间和 token 消耗证据为准，不预设 D1/R2、Redis 或阿里云具体产品。

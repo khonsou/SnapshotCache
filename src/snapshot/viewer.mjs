@@ -20,15 +20,15 @@ async function readLimited(response, max) {
   return bytes;
 }
 
-export async function loadSnapshot(ref, scope, { fetcher = fetch, signal, parents } = {}) {
+export async function loadSnapshot(ref, scope, { fetcher = fetch, signal, parents, base, resourceById = false } = {}) {
   if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(ref.snapshotId)) throw new Error('无效快照引用');
-  const base = `/snapshots/${ref.snapshotId}/`;
+  base ||= `/snapshots/${ref.snapshotId}/`;
   const options = { cache: 'no-store', credentials: 'same-origin', signal, redirect: 'error' };
-  const manifestBytes = await readLimited(await fetcher(base + 'manifest.json', options), LIMITS.manifestBytes);
+  const manifestBytes = await readLimited(await fetcher(base + (resourceById ? 'manifest' : 'manifest.json'), options), LIMITS.manifestBytes);
   const m = await validateEnvelope(manifestBytes, ref, scope);
   const files = new Map();
   // Sequential bounded reads avoid multiplying memory limits or leaving work after a failure.
-  for (const resource of m.resources) files.set(resource.path, await readLimited(await fetcher(base + resource.path, options), resource.byteLength));
+  for (const resource of m.resources) files.set(resource.path, await readLimited(await fetcher(base + (resourceById ? 'resources/' + encodeURIComponent(resource.id) : resource.path), options), resource.byteLength));
   return validatePackage(manifestBytes, files, ref, scope, parents);
 }
 

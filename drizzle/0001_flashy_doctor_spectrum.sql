@@ -1,0 +1,1 @@
+ALTER TABLE `snapshot_runs` ADD `reply` text;

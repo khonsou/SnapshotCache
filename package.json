@@ -10,6 +10,7 @@
     "build": "npm run contracts:build && node scripts/build.mjs",
     "test": "npm run contracts:build && node --test tests/*.test.mjs",
     "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
     "check": "npm test && npm run build && npm run fixtures:verify",
     "backup": "node scripts/backup.mjs"
   },
@@ -20,11 +21,14 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "canonicalize": "^5.0.0",
+    "drizzle-orm": "^0.45.2",
     "jsonc-parser": "^3.3.1",
     "parse5": "^8.0.1"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260515.1",
     "@playwright/test": "^1.63.0",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.2"
   }
 }
