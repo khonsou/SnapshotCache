@@ -22,7 +22,7 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：34/34 通过；新增 Timeline 协议／只读客户端、模型工具循环、真实项目配置、用户项目范围、无状态完整包和凭据缺失失败关闭测试。
+- `npm test`：35/35 通过；新增 Timeline 协议／只读客户端、模型工具循环、真实项目配置、用户项目范围、无状态完整包、凭据缺失失败关闭，以及“按 Agent Support 指南读取 Timeline，获取项目最新状况”自动进入工具链的回归测试。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
 - `npm run test:e2e`：22/22 通过，Chromium 与 WebKit 各 11 个场景；新增配置模式隐藏 dummy、内联完整包隔离加载及刷新后消失场景。
 - `node --env-file=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；真实 DeepSeek 选择 `timeline_read_board` 工具后，使用受控模拟 Timeline 响应生成并校验完整快照成功，repairCount=0、4 个资源、9,375 字节。此项未访问真实 Timeline 看板。
@@ -41,6 +41,7 @@
 - 无 D1/R2 时可返回完整内联包，由当前页面沿用同一校验／隔离链路加载；界面明确提示刷新后消失。
 - 真实项目由受控服务端配置提供并按可信 actor allowlist 过滤；标题、上下文和 Timeline 范围不采信客户端，返回前剔除凭据引用和实例地址。
 - 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
+- 已配置 Timeline 项目中的读取、查询、最新状态和项目进展类请求会从 `auto` 路由到快照工具链；普通概念讨论仍保留文本回复，且不再错误宣称系统没有 HTTP／Timeline 工具。
 
 ## 原 P2 尚未执行的验收
 

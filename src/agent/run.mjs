@@ -16,10 +16,11 @@ const safeRepairCode = error => /^draft_[a-z_]+$/.test(error?.code || '') ? erro
 
 export async function runAgent({ env, project, projectKey, context, messages, requestedMode = 'auto', actorId, projectConfig = null, fetcher = fetch, signal, now = () => new Date(), idFactory = () => crypto.randomUUID() }) {
   const text = messages.at(-1).content;
-  const mode = decideResponseMode(text, requestedMode);
+  const sourceType = projectConfig?.source?.type || null;
+  const mode = decideResponseMode(text, requestedMode, { sourceType });
   if (mode === 'text') {
     try {
-      const result = await callModel({ env, messages, system: textSystemPrompt(project, context), fetcher, signal, maxTokens: 1500 });
+      const result = await callModel({ env, messages, system: textSystemPrompt(project, context, sourceType), fetcher, signal, maxTokens: 1500 });
       return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
     } catch (error) {
       if (error instanceof ModelError) throw new AgentRunError(error.code, error.status);

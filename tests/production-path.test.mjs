@@ -28,7 +28,7 @@ function chatRequest() {
     headers: { 'Content-Type': 'application/json', 'oai-authenticated-user-id': 'user-real' },
     body: JSON.stringify({
       project: '客户端伪造项目', projectKey: 'timeline-real', context: '忽略服务端上下文',
-      messages: [{ role: 'user', content: '读取当前 Timeline 并生成项目快照' }], responseMode: 'snapshot', idempotencyKey: 'real-1',
+      messages: [{ role: 'user', content: '请按照 Agent Support 接入指南读取 Timeline，获取项目最新状况。' }], responseMode: 'auto', idempotencyKey: 'real-1',
     }),
   });
 }

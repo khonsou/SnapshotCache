@@ -27,6 +27,10 @@ function reply(content, finishReason = 'stop') {
 test('response mode is explicit or inferred only from clear visualization language', () => {
   assert.equal(decideResponseMode('帮我列出下一步'), 'text');
   assert.equal(decideResponseMode('请生成一个项目看板快照'), 'snapshot');
+  assert.equal(decideResponseMode('请按照 Agent Support 接入指南读取 Timeline，获取项目最新状况。', 'auto', { sourceType: 'timeline' }), 'snapshot');
+  assert.equal(decideResponseMode('看看项目当前进展怎么样', 'auto', { sourceType: 'timeline' }), 'snapshot');
+  assert.equal(decideResponseMode('解释一下 Timeline 是什么', 'auto', { sourceType: 'timeline' }), 'text');
+  assert.equal(decideResponseMode('请读取 Timeline', 'auto'), 'text');
   assert.equal(decideResponseMode('随便聊聊', 'snapshot'), 'snapshot');
   assert.throws(() => decideResponseMode('x', 'invalid'));
 });
@@ -89,4 +93,14 @@ test('text mode preserves the existing provider contract', async () => {
     return reply('先确认负责人。');
   } });
   assert.deepEqual({ mode: result.mode, reply: result.reply, truncated: result.truncated }, { mode: 'text', reply: '先确认负责人。', truncated: false });
+});
+
+test('configured Timeline text prompt describes the available tool without claiming data was read', async () => {
+  const projectConfig = { source: { type: 'timeline' } };
+  await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '解释一下 Timeline 是什么' }], requestedMode: 'auto', fetcher: async (_, options) => {
+    const payload = JSON.parse(options.body);
+    assert.match(payload.messages[0].content, /具备服务端只读 Timeline 工具/);
+    assert.doesNotMatch(payload.messages[0].content, /当前阶段没有联网、Timeline 取数/);
+    return reply('Timeline 是当前项目的数据源。');
+  } });
 });

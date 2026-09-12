@@ -22,7 +22,7 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 - 无存储生产路径：响应内携带完整快照包供当前页面校验、隔离展示，并明确提示刷新后消失；D1/R2 存在时仍可使用原型存储路径。
 - 真实项目模式隐藏 dummy 项目、成员编辑、fixture 选择和生成历史入口；未获项目授权的用户不会回退到 dummy 业务界面。
 
-当前自动证据：34 项 Node 测试、22 项浏览器测试（11 个场景 × Chromium / WebKit）、7 个 fixture 校验及 Worker 构建通过。另已用真实 DeepSeek 完成普通文本和一次工具选择／完整快照生成最小评测；Timeline 返回为受控模拟，尚未读取目标看板。详情见 `docs/testing/P2_ACCEPTANCE.md`。
+当前自动证据：35 项 Node 测试、22 项浏览器测试（11 个场景 × Chromium / WebKit）、7 个 fixture 校验及 Worker 构建通过。真实 Timeline 项目中的“读取／获取最新状态”等自然语言会自动进入只读工具链，不再错误回复“没有联网能力”。另已用真实 DeepSeek 完成普通文本和一次工具选择／完整快照生成最小评测；Timeline 返回为受控模拟，尚未读取目标看板。详情见 `docs/testing/P2_ACCEPTANCE.md`。
 
 ## 已具备
 

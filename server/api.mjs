@@ -111,7 +111,7 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
   const project = projectConfig?.title ?? submittedProject;
   const context = projectConfig?.context ?? submittedContext;
   if (!validText(project, 80) || !project.trim() || !validText(context, 10000)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
-  const resolvedMode = decideResponseMode(messages.at(-1).content, responseMode);
+  const resolvedMode = decideResponseMode(messages.at(-1).content, responseMode, { sourceType: projectConfig?.source?.type || null });
   if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
