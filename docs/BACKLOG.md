@@ -18,7 +18,7 @@
 
 - R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
 - R0-02 · In progress：普通文本和一类 Timeline 工具快照已通过真实 DeepSeek；待第二种表现、空／边界、非法候选／修复和产品复核。
-- R0-03 · Done：35 项 Node、7 个 fixture、Worker 构建和 22 项 Chromium／WebKit 场景通过；真实项目路径已验证关闭 dummy 和持久化原型 UI；Timeline 最新状态自然语言已覆盖自动路由回归。
+- R0-03 · Done：35 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、无状态内联快照、刷新消失、项目删除及 Timeline 最新状态自动路由。
 
 ## R1 · Timeline Agent Support 真实数据
 
@@ -31,10 +31,10 @@ R1 验收：真实 Timeline 只读数据可以稳定生成协议合规快照；�
 
 ## R2 · 项目数据全真替换
 
-- REAL-01 · Implemented：部署级 `XUYAN_PROJECTS_JSON` 定义 project ID、标题、上下文、允许用户、Timeline 实例、board 和凭据引用；配置与代码分离并严格校验。
-- REAL-02 · In progress：配置模式会移除可见 dummy 项目／消息／成员编辑／fixture／历史入口；demo fixture 仍保留在同一构建中供无配置开发模式回归，真实成员展示待 OAuth。
-- REAL-03 · Implemented：服务端按 project ID 和可信 actor 解析项目、上下文与工具范围，忽略客户端伪造字段；越权和未知项目返回 404。
-- REAL-04 · Blocked：需要目标密码和公司身份资料后核对真实项目页面、身份、Timeline 请求与快照 provenance。
+- REAL-01 · Implemented：用户可随时新建、重命名、归档和删除项目；删除同步清理本地对话、上下文、成员和生成引用，不建立第二套服务器项目配置。
+- REAL-02 · In progress：Timeline 地址、board ID 和访问密码由用户项目上下文声明；原始上下文是唯一记录，密码在发送 DeepSeek 前脱敏，已通过模拟响应验证。当前刷新后重置，生产持久化与级联删除待 OAuth 数据模型。
+- REAL-03 · Removed：取消部署级 `XUYAN_PROJECTS_JSON`／连接注册表作为生产方案；服务器只处理项目对话和上下文，权限由后续 OAuth 成员关系负责。
+- REAL-04 · Blocked：需要在用户创建项目的上下文中填入目标连接信息后，核对真实 Timeline 请求与快照 provenance。
 
 R2 验收：生产目标项目不含模拟业务事实，所有业务数据和上下文都有真实配置或 Timeline 响应依据。
 

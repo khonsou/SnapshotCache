@@ -44,6 +44,13 @@ class ProjectDirectory {
 
   restore(id) { this.archived.delete(id); }
 
+  remove(id) {
+    if (!Object.hasOwn(this.projects, id)) throw new Error('项目不存在。');
+    delete this.projects[id];
+    this.archived.delete(id);
+    this.contexts.delete(id);
+  }
+
   getContext(id) {
     if (!Object.hasOwn(this.projects, id)) throw new Error('项目不存在。');
     return this.contexts.get(id) || '';

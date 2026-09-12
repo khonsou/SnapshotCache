@@ -1,6 +1,6 @@
 import { callModel, ModelError } from './model.mjs';
 import { textSystemPrompt, snapshotSystemPrompt, toolSelectionSystemPrompt } from './prompt.mjs';
-import { decideResponseMode } from './intent.mjs';
+import { decideResponseMode, shouldReadProjectSource } from './intent.mjs';
 import { buildQueryContext, buildSnapshotCandidate, parseSnapshotDraft } from './draft.mjs';
 import { AgentToolError, createProjectToolset } from './tools.mjs';
 
@@ -20,7 +20,7 @@ export async function runAgent({ env, project, projectKey, context, messages, re
   const mode = decideResponseMode(text, requestedMode, { sourceType });
   if (mode === 'text') {
     try {
-      const result = await callModel({ env, messages, system: textSystemPrompt(project, context, sourceType), fetcher, signal, maxTokens: 1500 });
+      const result = await callModel({ env, messages, system: textSystemPrompt(project, context), fetcher, signal, maxTokens: 1500 });
       return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
     } catch (error) {
       if (error instanceof ModelError) throw new AgentRunError(error.code, error.status);
@@ -33,7 +33,7 @@ export async function runAgent({ env, project, projectKey, context, messages, re
   let source = null;
   let generationMessages = messages;
   let toolset;
-  try { toolset = createProjectToolset({ env, projectConfig, fetcher, signal, now }); }
+  try { toolset = shouldReadProjectSource(text, sourceType) ? createProjectToolset({ env, projectConfig, fetcher, signal, now }) : null; }
   catch (error) {
     if (error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
     throw error;
@@ -84,7 +84,7 @@ export async function runAgent({ env, project, projectKey, context, messages, re
     }
     try {
       const draft = parseSnapshotDraft(result.content);
-      const query = await buildQueryContext({ scope, project, context, text, createdAt, requestedMode, source, policyVersion: projectConfig ? 'configured-project-v1' : 'p2-owner-scope-v1' });
+      const query = await buildQueryContext({ scope, project, context, text, createdAt, requestedMode, source, policyVersion: projectConfig?.policyVersion || (projectConfig ? 'configured-project-v1' : 'p2-owner-scope-v1') });
       const candidate = await buildSnapshotCandidate({ draft, snapshotId: `gen-${idFactory()}`, scope, createdAt, query, model: result.model, source });
       return { mode, reply: draft.reply, truncated: result.truncated, model: result.model, usage: result.usage, attempt, candidate };
     } catch (error) {

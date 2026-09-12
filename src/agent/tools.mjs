@@ -38,9 +38,10 @@ function parseArguments(value) {
 
 export function createProjectToolset({ env, projectConfig, fetcher = fetch, signal, now }) {
   if (projectConfig?.source?.type !== 'timeline') return null;
-  const password = env[projectConfig.source.credentialEnv];
+  const password = projectConfig.source.password || env[projectConfig.source.credentialEnv];
+  const { password: _password, credentialEnv: _credentialEnv, ...clientSource } = projectConfig.source;
   let client;
-  try { client = createTimelineClient({ ...projectConfig.source, password, fetcher, signal, now }); }
+  try { client = createTimelineClient({ ...clientSource, password, fetcher, signal, now }); }
   catch (error) {
     if (error instanceof TimelineError) throw new AgentToolError(error.code, error.status);
     throw error;

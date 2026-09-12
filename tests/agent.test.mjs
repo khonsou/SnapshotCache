@@ -95,12 +95,14 @@ test('text mode preserves the existing provider contract', async () => {
   assert.deepEqual({ mode: result.mode, reply: result.reply, truncated: result.truncated }, { mode: 'text', reply: '先确认负责人。', truncated: false });
 });
 
-test('configured Timeline text prompt describes the available tool without claiming data was read', async () => {
+test('configured Timeline project still answers unrelated questions without project-topic restrictions', async () => {
   const projectConfig = { source: { type: 'timeline' } };
-  await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '解释一下 Timeline 是什么' }], requestedMode: 'auto', fetcher: async (_, options) => {
+  const result = await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '讲一个关于猫的冷笑话' }], requestedMode: 'auto', fetcher: async (_, options) => {
     const payload = JSON.parse(options.body);
-    assert.match(payload.messages[0].content, /具备服务端只读 Timeline 工具/);
+    assert.match(payload.messages[0].content, /工作相关或无关的问题都直接回答/);
     assert.doesNotMatch(payload.messages[0].content, /当前阶段没有联网、Timeline 取数/);
-    return reply('Timeline 是当前项目的数据源。');
+    return reply('猫为什么不玩电脑？因为它怕鼠标。');
   } });
+  assert.equal(result.mode, 'text');
+  assert.match(result.reply, /猫/);
 });

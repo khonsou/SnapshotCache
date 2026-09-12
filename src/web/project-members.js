@@ -67,4 +67,6 @@ class ProjectMembers {
     if (targetRole === 'admin' && actorRole !== 'owner') throw new Error('只有群主可以移出管理员。');
     group.delete(targetId);
   }
+
+  removeProject(projectId) { this.groups.delete(projectId); }
 }

@@ -230,6 +230,8 @@ dialog .chart { height: 130px; }
 .member-row-actions select:focus-visible { outline: 2px solid #869aba; outline-offset: 2px; }
 .remove-member { color: #9299a4; }
 .remove-member:hover { color: #a45959; }
+.danger-action { color: #a45959; }
+.danger-action:hover { color: #7f3030; }
 .member-agent { display: flex; align-items: center; gap: 12px; margin: 0 28px; padding: 18px 0; border-top: 1px solid var(--line); }
 .member-picker { margin: 0 28px 20px; padding: 16px; border: 1px solid #e9ecf2; border-radius: 10px; background: #f7f8fb; }
 .member-picker > label { display: block; font-size: 13px; color: #778291; margin-bottom: 10px; }

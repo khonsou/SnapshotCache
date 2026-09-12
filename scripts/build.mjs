@@ -18,15 +18,11 @@ for (const entry of catalog.entries) {
 }
 const result = await build({ stdin: { contents: `import { handleChat, json } from './server/api.mjs';
 import { assetHeaders } from './server/headers.mjs';
-import { handleSnapshotRequest } from './server/snapshots.mjs';
-import { handleProjectsRequest } from './server/projects.mjs';
 const assets = ${JSON.stringify(assets)};
 export default { async fetch(request, env) {
   const path = new URL(request.url).pathname;
   if (path === '/api/chat') return handleChat(request, env);
   if (path === '/api/health') return json({ configured: Boolean(env.DEEPSEEK_API_KEY) });
-  if (path === '/api/projects') return handleProjectsRequest(request, env);
-  if (path.startsWith('/api/projects/')) return handleSnapshotRequest(request, env);
   if (!['GET', 'HEAD'].includes(request.method)) return json({error:'Method not allowed'},405);
   const asset = Object.hasOwn(assets, path) ? assets[path] : null;
   if (!asset) return json({error:'Not found'},404);

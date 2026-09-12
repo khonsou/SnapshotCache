@@ -1,7 +1,7 @@
-import { decideResponseMode, validProjectKey } from '../src/agent/intent.mjs';
+import { decideResponseMode, shouldReadProjectSource, validProjectKey } from '../src/agent/intent.mjs';
 import { AgentRunError, runAgent } from '../src/agent/run.mjs';
 import { createSitesSnapshotStore, StoreError } from '../src/platform/store.mjs';
-import { ProjectConfigError, resolveProject } from '../src/platform/projects.mjs';
+import { ContextConfigError, inspectTimelineProjectContext } from '../src/platform/context-source.mjs';
 
 const limits = new Map();
 const MAX_BODY = 100000;
@@ -49,6 +49,7 @@ function errorMessage(code) {
     project_not_found: '当前项目不存在或尚未配置。',
     project_config_invalid: '服务端项目配置无效，请联系管理员。',
     timeline_not_configured: 'Timeline 数据源尚未配置凭据，请联系管理员。',
+    timeline_context_invalid: '项目上下文中的 Timeline 连接信息不完整或格式不正确。',
     timeline_unauthorized: 'Timeline 登录已失效，请重试。',
     timeline_forbidden: 'Timeline 凭据无效或当前看板拒绝访问。',
     timeline_not_found: 'Timeline 看板或资源不存在。',
@@ -102,16 +103,24 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
   catch (error) { return json({ error: error.message === 'large' ? '消息过长，请缩短后重试。' : '请求格式不正确。' }, error.message === 'large' ? 413 : 400); }
   const { project: submittedProject, projectKey, context: submittedContext, messages, responseMode = 'auto', idempotencyKey } = body || {};
   if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 || messages.some(message => !message || !['user', 'assistant'].includes(message.role) || !validText(message.content, 6000) || !message.content.trim()) || messages.at(-1).role !== 'user' || !['auto', 'text', 'snapshot'].includes(responseMode)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
-  let projectConfig;
-  try { projectConfig = resolveProject(env, projectKey, user); }
-  catch (error) {
-    if (error instanceof ProjectConfigError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status);
-    return json({ error: errorMessage('project_config_invalid'), errorCode: 'project_config_invalid' }, 500);
-  }
-  const project = projectConfig?.title ?? submittedProject;
-  const context = projectConfig?.context ?? submittedContext;
+  const project = submittedProject;
+  const context = submittedContext;
   if (!validText(project, 80) || !project.trim() || !validText(context, 10000)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
-  const resolvedMode = decideResponseMode(messages.at(-1).content, responseMode, { sourceType: projectConfig?.source?.type || null });
+  const latestText = messages.at(-1).content;
+  let contextSource;
+  try { contextSource = inspectTimelineProjectContext(context); }
+  catch (error) {
+    if (error instanceof ContextConfigError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status);
+    return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
+  }
+  const safeContext = contextSource.safeContext;
+  const sourceType = contextSource.declared ? 'timeline' : null;
+  const resolvedMode = decideResponseMode(latestText, responseMode, { sourceType });
+  let agentProjectConfig = null;
+  if (shouldReadProjectSource(latestText, sourceType)) {
+    if (!contextSource.source) return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
+    agentProjectConfig = { source: contextSource.source, policyVersion: 'user-context-v1' };
+  }
   if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
@@ -122,14 +131,14 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
   const timer = setTimeout(abort, resolvedMode === 'snapshot' ? 90000 : 45000);
   try {
     if (resolvedMode === 'text') {
-      const result = await runAgent({ env, project, projectKey: projectKey || 'text', context, messages, requestedMode: 'text', actorId: user, projectConfig, fetcher, signal: controller.signal, now, idFactory });
+      const result = await runAgent({ env, project, projectKey: projectKey || 'text', context: safeContext, messages, requestedMode: 'text', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
       return json({ reply: result.reply, truncated: result.truncated });
     }
     const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
     const createdAt = now().toISOString();
     const runId = `run-${idFactory()}`;
     if (!snapshotStore) {
-      const result = await runAgent({ env, project, projectKey, context, messages, requestedMode: 'snapshot', actorId: user, projectConfig, fetcher, signal: controller.signal, now, idFactory });
+      const result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: 'snapshot', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
       const messageId = `msg-${idFactory()}`;
       const generation = result.candidate.manifest.extensions['com.xuyan.generation'];
       return json({
@@ -158,7 +167,7 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
     }
     let result;
     try {
-      result = await runAgent({ env, project, projectKey, context, messages, requestedMode: 'snapshot', actorId: user, projectConfig, fetcher, signal: controller.signal, now, idFactory });
+      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: 'snapshot', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
     } catch (error) {
       const code = error.code || 'candidate_validation_failed';
       await snapshotStore.failRun({ runId, actorId: user, projectKey, errorCode: code, repairCount: error.repairCount || 0, finishedAt: now().toISOString() });

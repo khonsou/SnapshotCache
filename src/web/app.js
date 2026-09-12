@@ -7,7 +7,6 @@ const projects = {
   brand: {title:'品牌体验升级',subtitle:'9 月第 2 周',summary:'品牌规范的核心部分已完成，官网和包装正在同步推进。接下来优先统一移动端的视觉细节。',metrics:[['已更新触点','12','个','覆盖 4 个业务场景'],['规范完成度','75','%','目标本月完成'],['已完成事项','9','/ 12','本周完成 3 项']],channels:[['官网',40],['产品界面',30],['品牌物料',20],['线下触点',10]],tasks:[['09.08','品牌基础规范确认','乔一 · 品牌设计','已完成'],['09.10','官网视觉适配','乔一 · 品牌设计','进行中'],['09.13','移动端体验走查','林安 · 产品团队','待开始'],['09.18','品牌规范交付','全体成员','待开始']],bars:[15,22,30,28,40,45,49,65,61,72,83,90]},
   research: {title:'用户研究室',subtitle:'9 月 1 日 — 9 月 10 日',summary:'已完成 18 场访谈。大家最关心的是信息是否清晰、协作能否顺畅，这两点会是下一轮体验验证的重点。',metrics:[['已访谈用户','18','人','覆盖 3 类用户'],['访谈完成度','90','%','计划 20 场访谈'],['关键发现','6','项','3 项已进入验证']],channels:[['新用户',35],['活跃用户',40],['流失用户',20],['其他',5]],tasks:[['09.07','访谈提纲确认','林安 · 用户研究','已完成'],['09.10','深度用户访谈','林安 · 用户研究','进行中'],['09.12','整理研究发现','陆遥 · 产品团队','待开始'],['09.16','研究结论分享','全体成员','待开始']],bars:[10,15,30,25,40,50,45,60,72,80,88,95]}
 };
-let configuredMode = false;
 const directory = new ProjectDirectory(projects);
 const membership = new ProjectMembers(workspacePeople, 'me');
 for (const id of Object.keys(projects)) {
@@ -24,7 +23,6 @@ let currentProject = 'launch';
 let serial = 0;
 const histories = {};
 const pending = new Set();
-const generatedEntries = new Map();
 const list = document.querySelector('#message-list');
 const conversation = document.querySelector('#conversation');
 const input = document.querySelector('#message-input');
@@ -50,33 +48,15 @@ function dynamicSnapshot(project, entry) {
   const persistence = entry.snapshotPersistence === 'session' ? ' · 仅当前页面，刷新后消失' : '';
   return `<div class="snapshot-container" data-project="${escapeHtml(project)}" data-snapshot-id="${escapeHtml(ref.snapshotId)}"><div class="snapshot-header"><div><h2>${escapeHtml(title)}</h2><p class="snapshot-subtitle">${escapeHtml(date)} · ${source}</p></div><button class="icon-button" data-expand aria-label="展开生成快照">${icon('expand')}</button></div><snapshot-viewer source="dynamic" snapshot-title="${escapeHtml(title)}" snapshot-id="${escapeHtml(ref.snapshotId)}" manifest-hash="${escapeHtml(ref.manifestHash)}" tenant-id="${escapeHtml(scope.tenantId)}" project-id="${escapeHtml(project)}"></snapshot-viewer><div class="snapshot-provenance"><span>动态生成 · ${source}${persistence}</span><button class="text-button" data-reload-snapshot>重新加载</button></div></div>`;
 }
-function generatedHistoryPlaceholder(project) {
-  return `<div data-generated-history="${project}"></div>`;
-}
-async function loadGeneratedSnapshots(project) {
-  if (configuredMode) return;
-  const host = list.querySelector(`[data-generated-history="${project}"]`);
-  if (!host) return;
-  try {
-    const response = await fetch(`/api/projects/${encodeURIComponent(project)}/snapshots`, { cache:'no-store' });
-    if (!response.ok) return;
-    const result = await response.json();
-    if (!Array.isArray(result.entries) || !result.entries.length) return;
-    for (const entry of result.entries) generatedEntries.set(`${project}\0${entry.ref.snapshotId}`, entry);
-    host.innerHTML = `<section class="generated-history"><div><strong>本项目生成记录</strong><span>刷新后可从这里重新打开</span></div>${result.entries.map(entry => `<button class="text-button" data-open-generated="${entry.ref.snapshotId}">${escapeHtml(entry.title)}</button>`).join('')}</section>`;
-    if (currentProject === project) histories[project] = list.innerHTML;
-  } catch {}
-}
 function fixturePicker(project) {
-  if (configuredMode || project !== 'launch') return '';
+  if (project !== 'launch') return '';
   return `<div class="fixture-picker"><label>验证样例 <select data-fixture-picker aria-label="快照验证样例"><option value="">选择后在新消息中打开</option>${snapshotCatalog.entries.filter(e => e.scope.projectId === project).map(e => `<option value="${e.ref.snapshotId}">${escapeHtml(e.label)}</option>`).join('')}</select></label><span>样例使用固定模拟数据</span></div>`;
 }
 function initialMessages(project) {
   const data = projects[project];
-  if(data.isConfigured) return `<div class="empty-conversation"><span class="empty-symbol">${icon('spark')}</span><h2>${escapeHtml(data.title)}</h2><p>真实项目已由服务端加载。向序言提问，或要求基于 Timeline 生成快照。</p></div>`;
   if(data.isNew) return emptyConversation();
-  if(project==='launch') return `<div class="day-divider">9 月 10 日</div>${message('lu','<p class="message-text">早上好，距离新品发布还有 5 天。我们一起对一下进展？</p>','10:30')}${message('qiao','<p class="message-text">视觉物料已经全部定稿，首轮内容今天可以上线。</p>','10:31')}${message('me','<p class="message-text"><span class="mention">@序言</span> 帮我们看看目前的整体进展。</p>')}${message('agent',`<p class="message-text">以下是已冻结的模拟项目安排，可查看、筛选或展开。</p>${snapshot(project)}${fixturePicker(project)}`)}${generatedHistoryPlaceholder(project)}`;
-  return `<div class="day-divider">9 月 10 日</div>${message('lu',`<p class="message-text">我们对一下「${escapeHtml(data.title)}」的最新进展吧。</p>`,'10:30')}${message('me','<p class="message-text"><span class="mention">@序言</span> 整理一下目前的情况。</p>','10:31')}${message('agent',`<p class="message-text">以下是已冻结的模拟项目安排，可查看、筛选或展开。</p>${snapshot(project)}${fixturePicker(project)}`)}${generatedHistoryPlaceholder(project)}`;
+  if(project==='launch') return `<div class="day-divider">9 月 10 日</div>${message('lu','<p class="message-text">早上好，距离新品发布还有 5 天。我们一起对一下进展？</p>','10:30')}${message('qiao','<p class="message-text">视觉物料已经全部定稿，首轮内容今天可以上线。</p>','10:31')}${message('me','<p class="message-text"><span class="mention">@序言</span> 帮我们看看目前的整体进展。</p>')}${message('agent',`<p class="message-text">以下是已冻结的模拟项目安排，可查看、筛选或展开。</p>${snapshot(project)}${fixturePicker(project)}`)}`;
+  return `<div class="day-divider">9 月 10 日</div>${message('lu',`<p class="message-text">我们对一下「${escapeHtml(data.title)}」的最新进展吧。</p>`,'10:30')}${message('me','<p class="message-text"><span class="mention">@序言</span> 整理一下目前的情况。</p>','10:31')}${message('agent',`<p class="message-text">以下是已冻结的模拟项目安排，可查看、筛选或展开。</p>${snapshot(project)}${fixturePicker(project)}`)}`;
 }
 function renderNavigation() {
   document.querySelector('#project-list').innerHTML = directory.list().map(({id,title}) => `<button class="project ${id===currentProject?'active':''}" data-project="${id}" ${id===currentProject?'aria-current="page"':''}>${icon('folder')}<span>${escapeHtml(title)}</span></button>`).join('') || '<p class="sidebar-empty">暂无进行中的项目</p>';
@@ -92,7 +72,6 @@ function renderProject(project) {
   syncMembersHeader();
   renderNavigation();
   input.value='';input.disabled=!project;syncInput();closeSidebar();conversation.scrollTop=0;
-  if(project)loadGeneratedSnapshots(project);
 }
 function scrollDown() {requestAnimationFrame(()=>conversation.scrollTo({top:conversation.scrollHeight,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'}));}
 function syncInput() {input.style.height='auto';input.style.height=`${Math.min(input.scrollHeight,130)}px`;document.querySelector('.send-button').disabled=!currentProject||!input.value.trim()||activeRequests.has(currentProject);}
@@ -226,7 +205,7 @@ function feedback(text) {
 function renderManager() {
   const items=directory.list(projectFilter==='archived');
   document.querySelectorAll('[data-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.filter===projectFilter)));
-  document.querySelector('#managed-projects').innerHTML=items.map(({id,title})=>`<div class="managed-project"><span class="managed-icon">${icon('folder')}</span><div class="managed-name"><span>${escapeHtml(title)}</span>${id===currentProject?'<small>当前项目</small>':''}</div><div class="project-actions"><button class="text-button context-entry" data-context="${id}" aria-label="${configuredMode?'查看':'管理'} ${escapeHtml(title)} 的上下文">上下文</button>${configuredMode?'':projectFilter==='active'?`<button class="text-button" data-rename="${id}" aria-label="重命名 ${escapeHtml(title)}">重命名</button><button class="text-button" data-archive="${id}" aria-label="归档 ${escapeHtml(title)}">归档</button>`:`<button class="text-button" data-restore="${id}" aria-label="恢复 ${escapeHtml(title)}">恢复</button>`}</div></div>`).join('') || `<div class="manager-empty">${projectFilter==='archived'?'还没有归档的项目':'暂无进行中的项目'}</div>`;
+  document.querySelector('#managed-projects').innerHTML=items.map(({id,title})=>`<div class="managed-project"><span class="managed-icon">${icon('folder')}</span><div class="managed-name"><span>${escapeHtml(title)}</span>${id===currentProject?'<small>当前项目</small>':''}</div><div class="project-actions"><button class="text-button context-entry" data-context="${id}" aria-label="管理 ${escapeHtml(title)} 的上下文">上下文</button>${projectFilter==='active'?`<button class="text-button" data-rename="${id}" aria-label="重命名 ${escapeHtml(title)}">重命名</button><button class="text-button" data-archive="${id}" aria-label="归档 ${escapeHtml(title)}">归档</button><button class="text-button danger-action" data-delete="${id}" aria-label="删除 ${escapeHtml(title)}">删除</button>`:`<button class="text-button" data-restore="${id}" aria-label="恢复 ${escapeHtml(title)}">恢复</button><button class="text-button danger-action" data-delete="${id}" aria-label="删除 ${escapeHtml(title)}">删除</button>`}</div></div>`).join('') || `<div class="manager-empty">${projectFilter==='archived'?'还没有归档的项目':'暂无进行中的项目'}</div>`;
 }
 function cancelProjectEdit() {
   projectForm.hidden=true;editingProject=null;projectName.value='';
@@ -263,6 +242,16 @@ projectDialog.addEventListener('click',event=>{
   }
   const restore=event.target.closest('[data-restore]');
   if(restore){directory.restore(restore.dataset.restore);if(!currentProject)renderProject(restore.dataset.restore);else renderNavigation();renderManager();document.querySelector('[data-filter="archived"]').focus();feedback('项目已恢复。');}
+  const remove=event.target.closest('[data-delete]');
+  if(remove){
+    const id=remove.dataset.delete,title=projects[id]?.title||'这个项目';
+    if(!confirm(`删除“${title}”？项目上下文和当前页面里的对话将一并删除。`))return;
+    activeRequests.get(id)?.abort();activeRequests.delete(id);
+    directory.remove(id);membership.removeProject(id);delete chatTurns[id];delete histories[id];
+    for(const [token,retry] of retries)if(retry.project===id)retries.delete(token);
+    if(currentProject===id)renderProject(directory.list()[0]?.id??null);else renderNavigation();
+    renderManager();feedback('项目及其本地上下文和对话已删除。');
+  }
 });
 projectForm.addEventListener('submit',event=>{
   event.preventDefault();
@@ -285,7 +274,7 @@ const selectedMembers = new Set();
 let memberProjectId = null;
 function syncMembersHeader() {
   const button = document.querySelector('#members-button');
-  button.hidden = !currentProject || configuredMode;
+  button.hidden = !currentProject;
   if (currentProject) {
     const count = membership.list(currentProject).length;
     button.textContent = `${count} 位成员`;
@@ -384,17 +373,17 @@ function showProjectManager() {
   document.querySelector('#project-manager-view').hidden=false;
   document.querySelector('#project-context-view').hidden=true;
   projectDialog.setAttribute('aria-labelledby','project-manager-title');
-  document.querySelector('#project-manager-feedback').textContent=configuredMode?'真实项目由服务端受控配置提供':'本地演示 · 项目修改在刷新后重置';
-  document.querySelector('#add-project').hidden=configuredMode;
-  document.querySelector('.manager-filters').hidden=configuredMode;
+  document.querySelector('#project-manager-feedback').textContent='本地演示 · 项目修改在刷新后重置';
+  document.querySelector('#add-project').hidden=false;
+  document.querySelector('.manager-filters').hidden=false;
 }
 function openProjectContext(id) {
   contextProjectId=id;
   const context=directory.getContext(id);
   document.querySelector('#context-project-name').textContent=projects[id].title;
   document.querySelector('#context-content').value=context;
-  document.querySelector('#context-content').readOnly=configuredMode;
-  document.querySelector('#context-form .primary-button').hidden=configuredMode;
+  document.querySelector('#context-content').readOnly=false;
+  document.querySelector('#context-form .primary-button').hidden=false;
   document.querySelector('#context-error').hidden=true;
   document.querySelector('#project-manager-view').hidden=true;
   document.querySelector('#project-context-view').hidden=false;
@@ -410,7 +399,6 @@ document.querySelector('#close-context').addEventListener('click',()=>projectDia
 document.querySelector('#cancel-context').addEventListener('click',returnToProjectManager);
 document.querySelector('#context-form').addEventListener('submit',event=>{
   event.preventDefault();
-  if(configuredMode)return;
   try {
     directory.saveContext(contextProjectId,document.querySelector('#context-content').value);
     returnToProjectManager();
@@ -427,55 +415,13 @@ document.addEventListener('change', event => {
   picker.value = ''; histories[currentProject] = list.innerHTML; scrollDown();
 });
 document.addEventListener('click', event => {
-  const open = event.target.closest('[data-open-generated]');
-  if (open && currentProject) {
-    const entry = generatedEntries.get(`${currentProject}\0${open.dataset.openGenerated}`);
-    if (entry) {
-      list.insertAdjacentHTML('beforeend', message('agent', `<p class="message-text">已从本项目生成记录重新打开，引用和内容保持不变。</p>${dynamicSnapshot(currentProject, entry)}`, undefined, 'generated'));
-      histories[currentProject] = list.innerHTML;
-      scrollDown();
-    }
-    return;
-  }
   const reload = event.target.closest('[data-reload-snapshot]');
   if (!reload) return;
   const viewer = reload.closest('.snapshot-container').querySelector('snapshot-viewer');
   viewer.replaceWith(viewer.cloneNode(false));
 });
 
-async function loadConfiguredProjects() {
-  const response = await fetch('/api/projects', { cache:'no-store' });
-  if (!response.ok) throw new Error(response.status === 401 ? '请先登录后访问项目。' : '真实项目配置暂不可用。');
-  const result = await response.json();
-  if (!result.configured) return;
-  if (!Array.isArray(result.projects) || !result.projects.length) throw new Error('真实项目配置为空。');
-  configuredMode = true;
-  for (const key of Object.keys(projects)) delete projects[key];
-  directory.contexts.clear();
-  directory.archived.clear();
-  for (const item of result.projects) {
-    projects[item.key] = { title:item.title, isConfigured:true, source:item.source, subtitle:'', summary:'', metrics:[], channels:[], tasks:[], bars:[] };
-    directory.saveContext(item.key,item.context||'');
-    membership.add(item.key,'me',[]);
-  }
-  currentProject = result.projects[0].key;
-}
-
-async function boot() {
-  try {
-    await loadConfiguredProjects();
-    list.innerHTML=initialMessages(currentProject);
-    document.querySelector('#project-title').textContent=projects[currentProject].title;
-    renderNavigation();
-    syncSidebar();
-    syncMembersHeader();
-    loadGeneratedSnapshots(currentProject);
-  } catch (error) {
-    currentProject=null;
-    list.innerHTML=`<div class="empty-conversation"><h2>项目暂不可用</h2><p>${escapeHtml(error.message)}</p></div>`;
-    document.querySelector('#project-title').textContent='项目对话';
-    renderNavigation();syncSidebar();syncMembersHeader();syncInput();
-  }
-}
-
-boot();
+list.innerHTML=initialMessages(currentProject);
+renderNavigation();
+syncSidebar();
+syncMembersHeader();

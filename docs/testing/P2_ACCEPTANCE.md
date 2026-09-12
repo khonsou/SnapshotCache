@@ -22,9 +22,9 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：35/35 通过；新增 Timeline 协议／只读客户端、模型工具循环、真实项目配置、用户项目范围、无状态完整包、凭据缺失失败关闭，以及“按 Agent Support 指南读取 Timeline，获取项目最新状况”自动进入工具链的回归测试。
+- `npm test`：35/35 通过；新增用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问，以及配置 Timeline 后仍正常回答工作无关问题的回归测试。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
-- `npm run test:e2e`：22/22 通过，Chromium 与 WebKit 各 11 个场景；新增配置模式隐藏 dummy、内联完整包隔离加载及刷新后消失场景。
+- `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖用户创建项目、在唯一上下文配置 Timeline、内联完整包隔离加载、刷新后消失，以及删除项目连同本地上下文和对话。
 - `node --env-file=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；真实 DeepSeek 选择 `timeline_read_board` 工具后，使用受控模拟 Timeline 响应生成并校验完整快照成功，repairCount=0、4 个资源、9,375 字节。此项未访问真实 Timeline 看板。
 - Timeline 公开探测：目标前缀下 `/api/meta` 返回 protocol 19.2、server 1.0.0、`items.read` 等能力与限额；根域同名端点返回 404。公开 `/api/agent-doc` 为降级摘要。
 
@@ -37,11 +37,12 @@
 - 同一用户／项目／幂等键只提交一次；重放不再调用模型。
 - 不同用户或项目读取目录、manifest 和资源时返回 404。
 - 存储失败会把 run 收敛为 failed，不保留 staging 成功假象。
-- 动态快照可在当前回复打开，刷新后可从项目生成记录按原 `snapshotRef` 回放。
+- 动态快照可在当前回复打开；首发无持久化路径刷新后消失，不显示项目生成历史。
 - 无 D1/R2 时可返回完整内联包，由当前页面沿用同一校验／隔离链路加载；界面明确提示刷新后消失。
-- 真实项目由受控服务端配置提供并按可信 actor allowlist 过滤；标题、上下文和 Timeline 范围不采信客户端，返回前剔除凭据引用和实例地址。
+- 用户项目的对话与上下文共享生命周期；Timeline 地址、board ID 和密码由上下文声明，不维护独立服务器项目／连接注册表。原始上下文是唯一配置，密码仅在发给 DeepSeek 的副本中脱敏。
 - 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
 - 已配置 Timeline 项目中的读取、查询、最新状态和项目进展类请求会从 `auto` 路由到快照工具链；普通概念讨论仍保留文本回复，且不再错误宣称系统没有 HTTP／Timeline 工具。
+- 项目上下文不限制话题；配置 Timeline 的项目仍会把工作无关问题作为普通 DeepSeek 对话处理，不强行拉回项目。
 
 ## 原 P2 尚未执行的验收
 
