@@ -1,6 +1,6 @@
-import { callModel, ModelError } from './model.mjs';
+import { callModel, callWebEnabledModel, ModelError } from './model.mjs';
 import { textSystemPrompt, snapshotSystemPrompt, toolSelectionSystemPrompt } from './prompt.mjs';
-import { decideResponseMode, shouldReadProjectSource } from './intent.mjs';
+import { decideResponseMode, shouldReadProjectSource, shouldSearchWeb } from './intent.mjs';
 import { buildQueryContext, buildSnapshotCandidate, parseSnapshotDraft } from './draft.mjs';
 import { AgentToolError, createProjectToolset } from './tools.mjs';
 
@@ -20,7 +20,7 @@ export async function runAgent({ env, project, projectKey, context, messages, re
   const mode = decideResponseMode(text, requestedMode, { sourceType });
   if (mode === 'text') {
     try {
-      const result = await callModel({ env, messages, system: textSystemPrompt(project, context), fetcher, signal, maxTokens: 1500 });
+      const result = await callWebEnabledModel({ env, messages, system: textSystemPrompt(project, context), fetcher, signal, maxTokens: 1500, forceWebSearch: shouldSearchWeb(text) });
       return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
     } catch (error) {
       if (error instanceof ModelError) throw new AgentRunError(error.code, error.status);

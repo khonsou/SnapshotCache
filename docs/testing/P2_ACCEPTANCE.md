@@ -22,7 +22,7 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：35/35 通过；新增用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问，以及配置 Timeline 后仍正常回答工作无关问题的回归测试。
+- `npm test`：36/36 通过；新增用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问、配置 Timeline 后仍正常回答工作无关问题，以及时效信息要求 DeepSeek 网页搜索的回归测试。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
 - `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖用户创建项目、在唯一上下文配置 Timeline、内联完整包隔离加载、刷新后消失，以及删除项目连同本地上下文和对话。
 - `node --env-file=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；真实 DeepSeek 选择 `timeline_read_board` 工具后，使用受控模拟 Timeline 响应生成并校验完整快照成功，repairCount=0、4 个资源、9,375 字节。此项未访问真实 Timeline 看板。
@@ -43,6 +43,7 @@
 - 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
 - 已配置 Timeline 项目中的读取、查询、最新状态和项目进展类请求会从 `auto` 路由到快照工具链；普通概念讨论仍保留文本回复，且不再错误宣称系统没有 HTTP／Timeline 工具。
 - 项目上下文不限制话题；配置 Timeline 的项目仍会把工作无关问题作为普通 DeepSeek 对话处理，不强行拉回项目。
+- 普通对话使用 DeepSeek 官方 Anthropic 兼容接口的服务端 `web_search`；“今天微博有什么新闻？”真实调用已产生搜索工具结果并返回来源 URL。OpenAI Responses 兼容接口在当前账号上会静默忽略同名内置工具，因此不作为本项目联网路径。
 
 ## 原 P2 尚未执行的验收
 

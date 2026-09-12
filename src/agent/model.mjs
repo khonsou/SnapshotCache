@@ -6,24 +6,12 @@ export class ModelError extends Error {
   }
 }
 
-export async function callModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, tools, toolChoice }) {
-  if (!env.DEEPSEEK_API_KEY) throw new ModelError('not_configured', 503);
+function modelName(env) { return env.DEEPSEEK_MODEL || 'deepseek-flash'; }
+
+async function providerResponse(fetcher, url, options, signal) {
   let response;
-  try {
-    response = await fetcher('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      signal,
-      headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: env.DEEPSEEK_MODEL || 'deepseek-flash',
-        thinking: { type: 'disabled' },
-        max_tokens: maxTokens,
-        stream: false,
-        messages: [{ role: 'system', content: system }, ...messages],
-        ...(tools?.length ? { tools, tool_choice: toolChoice || 'auto' } : {}),
-      }),
-    });
-  } catch (error) {
+  try { response = await fetcher(url, options); }
+  catch {
     if (signal?.aborted) throw new ModelError('timeout', 504);
     throw new ModelError('network_error');
   }
@@ -35,9 +23,25 @@ export async function callModel({ env, messages, system, fetcher = fetch, signal
     if (status === 402) throw new ModelError('provider_balance');
     throw new ModelError('provider_unavailable');
   }
-  let result;
-  try { result = await response.json(); }
+  try { return await response.json(); }
   catch { throw new ModelError('invalid_reply'); }
+}
+
+export async function callModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, tools, toolChoice }) {
+  if (!env.DEEPSEEK_API_KEY) throw new ModelError('not_configured', 503);
+  const result = await providerResponse(fetcher, 'https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      signal,
+      headers: { Authorization: `Bearer ${env.DEEPSEEK_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelName(env),
+        thinking: { type: 'disabled' },
+        max_tokens: maxTokens,
+        stream: false,
+        messages: [{ role: 'system', content: system }, ...messages],
+        ...(tools?.length ? { tools, tool_choice: toolChoice || 'auto' } : {}),
+      }),
+    }, signal);
   const choice = result.choices?.[0];
   const message = choice?.message;
   const content = message?.content;
@@ -51,8 +55,41 @@ export async function callModel({ env, messages, system, fetcher = fetch, signal
     content: validContent ? content : null,
     toolCalls: validToolCalls ? toolCalls : [],
     finishReason: choice.finish_reason,
-    model: env.DEEPSEEK_MODEL || 'deepseek-flash',
+    model: modelName(env),
     truncated: choice.finish_reason === 'length',
+    usage: result.usage && typeof result.usage === 'object' ? result.usage : null,
+  };
+}
+
+export async function callWebEnabledModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, forceWebSearch = false }) {
+  if (!env.DEEPSEEK_API_KEY) throw new ModelError('not_configured', 503);
+  const searchInstruction = forceWebSearch ? '本轮涉及实时公开信息，必须先调用 web_search，再根据搜索结果回答并附可核验的来源 URL。' : '';
+  const result = await providerResponse(fetcher, 'https://api.deepseek.com/anthropic/v1/messages', {
+    method: 'POST',
+    signal,
+    headers: { 'x-api-key': env.DEEPSEEK_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: modelName(env),
+      system: searchInstruction ? `${system}\n${searchInstruction}` : system,
+      messages,
+      thinking: { type: 'disabled' },
+      max_tokens: maxTokens,
+      stream: false,
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      tool_choice: { type: 'auto' },
+    }),
+  }, signal);
+  const content = Array.isArray(result.content) ? result.content
+    .filter(part => part?.type === 'text' && typeof part.text === 'string')
+    .map(part => part.text)
+    .join('\n') : '';
+  if (!content.trim() || content.length > 100000) throw new ModelError('invalid_reply');
+  return {
+    content,
+    toolCalls: [],
+    finishReason: result.stop_reason,
+    model: modelName(env),
+    truncated: result.stop_reason === 'max_tokens',
     usage: result.usage && typeof result.usage === 'object' ? result.usage : null,
   };
 }

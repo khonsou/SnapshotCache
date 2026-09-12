@@ -21,15 +21,17 @@ test('validates roles, context and actual body size', async () => {
 });
 test('uses fixed provider, server model and validated context without leaking secret', async () => {
   const response = await handleChat(request({ ...body, model: 'attacker-model', url: 'https://evil.test' }), env, { fetcher: async (url, options) => {
-    assert.equal(url, 'https://api.deepseek.com/chat/completions');
-    assert.equal(options.headers.Authorization, 'Bearer test-secret');
+    assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
+    assert.equal(options.headers['x-api-key'], 'test-secret');
+    assert.equal(options.headers['anthropic-version'], '2023-06-01');
     const payload = JSON.parse(options.body);
     assert.equal(payload.model, 'deepseek-flash');
     assert.deepEqual(payload.thinking, { type: 'disabled' });
-    assert.match(payload.messages[0].content, /测试项目/);
+    assert.match(payload.system, /测试项目/);
     assert.equal(payload.messages.at(-1).content, body.messages[0].content);
+    assert.deepEqual(payload.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
     assert.ok(!options.body.includes('test-secret'));
-    return Response.json({ choices: [{ message: { content: '先确认范围。' }, finish_reason: 'stop' }] });
+    return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '先确认范围。' }] });
   } });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { reply: '先确认范围。', truncated: false });
@@ -50,7 +52,7 @@ test('handles configuration, provider errors, malformed replies, network failure
 test('limits each hosted user to two simultaneous calls', async () => {
   const headers = { 'oai-authenticated-user-id': 'concurrent-user' };
   const finish = [];
-  const fetcher = () => new Promise(resolve => finish.push(() => resolve(Response.json({ choices: [{ message: { content: 'ok' } }] }))));
+  const fetcher = () => new Promise(resolve => finish.push(() => resolve(Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] }))));
   const first = handleChat(request(body, headers), env, { fetcher });
   const second = handleChat(request(body, headers), env, { fetcher });
   while (finish.length < 2) await new Promise(resolve => setImmediate(resolve));

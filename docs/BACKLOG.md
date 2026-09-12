@@ -18,7 +18,7 @@
 
 - R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
 - R0-02 · In progress：普通文本和一类 Timeline 工具快照已通过真实 DeepSeek；待第二种表现、空／边界、非法候选／修复和产品复核。
-- R0-03 · Done：35 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、无状态内联快照、刷新消失、项目删除及 Timeline 最新状态自动路由。
+- R0-03 · Done：36 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除及 Timeline 最新状态自动路由。
 
 ## R1 · Timeline Agent Support 真实数据
 

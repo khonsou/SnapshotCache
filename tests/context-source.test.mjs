@@ -87,12 +87,13 @@ test('Timeline read intent uses only the user project context and never sends it
 test('unrelated chat remains a normal DeepSeek request even when the project context declares Timeline', async () => {
   const response = await handleChat(request('讲一个关于猫的冷笑话。'), baseEnv, {
     fetcher: async (url, options) => {
-      assert.equal(url, 'https://api.deepseek.com/chat/completions');
+      assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
       const body = JSON.parse(options.body);
-      assert.equal(body.tools, undefined);
-      assert.match(body.messages[0].content, /工作相关或无关的问题都直接回答/);
+      assert.deepEqual(body.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
+      assert.deepEqual(body.tool_choice, { type: 'auto' });
+      assert.match(body.system, /工作相关或无关的问题都直接回答/);
       assert.doesNotMatch(options.body, new RegExp(password));
-      return Response.json({ choices: [{ message: { content: '猫最怕鼠标。' }, finish_reason: 'stop' }] });
+      return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '猫最怕鼠标。' }] });
     },
     idFactory: () => 'fixed',
   });

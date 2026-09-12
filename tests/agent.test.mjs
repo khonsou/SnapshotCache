@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decideResponseMode } from '../src/agent/intent.mjs';
+import { decideResponseMode, shouldSearchWeb } from '../src/agent/intent.mjs';
 import { parseSnapshotDraft } from '../src/agent/draft.mjs';
 import { runAgent } from '../src/agent/run.mjs';
 
@@ -24,6 +24,10 @@ function reply(content, finishReason = 'stop') {
   return Response.json({ choices: [{ message: { content }, finish_reason: finishReason }], usage: { total_tokens: 20 } });
 }
 
+function webReply(content, status = 'completed') {
+  return Response.json({ stop_reason: status === 'incomplete' ? 'max_tokens' : 'end_turn', content: [{ type: 'text', text: content }], usage: { total_tokens: 20 } });
+}
+
 test('response mode is explicit or inferred only from clear visualization language', () => {
   assert.equal(decideResponseMode('帮我列出下一步'), 'text');
   assert.equal(decideResponseMode('请生成一个项目看板快照'), 'snapshot');
@@ -32,6 +36,8 @@ test('response mode is explicit or inferred only from clear visualization langua
   assert.equal(decideResponseMode('解释一下 Timeline 是什么', 'auto', { sourceType: 'timeline' }), 'text');
   assert.equal(decideResponseMode('请读取 Timeline', 'auto'), 'text');
   assert.equal(decideResponseMode('随便聊聊', 'snapshot'), 'snapshot');
+  assert.equal(shouldSearchWeb('今天微博有什么新闻？'), true);
+  assert.equal(shouldSearchWeb('讲一个关于猫的冷笑话'), false);
   assert.throws(() => decideResponseMode('x', 'invalid'));
 });
 
@@ -86,23 +92,40 @@ test('unsafe generated presentation is rejected and repaired before it can be co
 });
 
 test('text mode preserves the existing provider contract', async () => {
-  const result = await runAgent({ ...base, messages: [{ role: 'user', content: '帮我列出下一步' }], requestedMode: 'auto', fetcher: async (_, options) => {
+  const result = await runAgent({ ...base, messages: [{ role: 'user', content: '帮我列出下一步' }], requestedMode: 'auto', fetcher: async (url, options) => {
+    assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
     const payload = JSON.parse(options.body);
     assert.equal(payload.max_tokens, 1500);
-    assert.match(payload.messages[0].content, /测试项目/);
-    return reply('先确认负责人。');
+    assert.match(payload.system, /测试项目/);
+    assert.deepEqual(payload.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
+    assert.deepEqual(payload.tool_choice, { type: 'auto' });
+    return webReply('先确认负责人。');
   } });
   assert.deepEqual({ mode: result.mode, reply: result.reply, truncated: result.truncated }, { mode: 'text', reply: '先确认负责人。', truncated: false });
 });
 
 test('configured Timeline project still answers unrelated questions without project-topic restrictions', async () => {
   const projectConfig = { source: { type: 'timeline' } };
-  const result = await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '讲一个关于猫的冷笑话' }], requestedMode: 'auto', fetcher: async (_, options) => {
+  const result = await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '讲一个关于猫的冷笑话' }], requestedMode: 'auto', fetcher: async (url, options) => {
+    assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
     const payload = JSON.parse(options.body);
-    assert.match(payload.messages[0].content, /工作相关或无关的问题都直接回答/);
-    assert.doesNotMatch(payload.messages[0].content, /当前阶段没有联网、Timeline 取数/);
-    return reply('猫为什么不玩电脑？因为它怕鼠标。');
+    assert.match(payload.system, /工作相关或无关的问题都直接回答/);
+    assert.match(payload.system, /网页搜索/);
+    assert.doesNotMatch(payload.system, /当前阶段没有联网、Timeline 取数/);
+    return webReply('猫为什么不玩电脑？因为它怕鼠标。');
   } });
   assert.equal(result.mode, 'text');
   assert.match(result.reply, /猫/);
+});
+
+test('time-sensitive public information forces DeepSeek web search', async () => {
+  const result = await runAgent({ ...base, messages: [{ role: 'user', content: '今天微博有什么新闻？' }], requestedMode: 'auto', fetcher: async (url, options) => {
+    assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
+    const payload = JSON.parse(options.body);
+    assert.deepEqual(payload.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
+    assert.deepEqual(payload.tool_choice, { type: 'auto' });
+    assert.match(payload.system, /必须先调用 web_search/);
+    return webReply('今天的新闻来自网页搜索。');
+  } });
+  assert.match(result.reply, /网页搜索/);
 });
