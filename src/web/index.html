@@ -57,7 +57,7 @@
     <div id="project-context-view" hidden>
       <div class="manager-header"><div><h2 id="project-context-title">上下文</h2><p id="context-project-name"></p></div><button class="icon-button" id="close-context" aria-label="关闭项目管理"><svg><use href="#i-close"/></svg></button></div>
       <form id="context-form" class="context-form">
-        <p class="context-intro">在这里告诉序言项目背景。需要读取 Timeline 时，另起三行填写“Timeline 地址”“Timeline 看板 ID”“Timeline 访问密码”。密码只用于服务端连接，不会发给模型。</p>
+        <p class="context-intro">在这里填写项目背景和数据源 Agent 接入说明。序言会把上下文中的 HTTPS 地址转换为受限的服务器端读取工具，并按说明完成协议探测、鉴权和查询；密码会转换成宿主密钥引用，不会把原值发给模型。</p>
         <label class="sr-only" for="context-content">项目上下文</label>
         <textarea id="context-content" rows="12" maxlength="10000" placeholder="写下项目的目标、背景、要求，或直接粘贴相关资料链接…"></textarea>
         <p id="context-error" class="form-error" role="alert" hidden></p>

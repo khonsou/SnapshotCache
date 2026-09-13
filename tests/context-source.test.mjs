@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handleChat } from '../server/api.mjs';
 import { inspectTimelineProjectContext, resolveContextTimelineSource } from '../src/platform/context-source.mjs';
+import { compileProjectContextRuntime } from '../src/platform/context-runtime.mjs';
+import { createProjectToolset } from '../src/agent/tools.mjs';
 
 const password = 'board-password-from-context';
 const context = `这是用户创建的 Timeline 项目。
@@ -53,6 +55,25 @@ test('user project context is the sole Timeline connection record and its passwo
   assert.match(inspected.safeContext, /\[已配置，仅服务端使用\]/);
   assert.deepEqual(resolveContextTimelineSource(context), inspected.source);
   assert.throws(() => resolveContextTimelineSource(context.replace(/Timeline 访问密码：.*/, '')), /timeline_context_invalid/);
+  const inline = compileProjectContextRuntime(`链接：[https://timeline.example.test/prefix/](https://timeline.example.test/prefix/) 看板id：board-real，密码${password}。访问说明：先探测再鉴权。`);
+  assert.deepEqual(inline.http.allowedPrefixes, [{ origin: 'https://timeline.example.test', pathname: '/prefix' }]);
+  assert.match(inline.safeContext, /密码\{\{PROJECT_SECRET_1\}\}/);
+  assert.doesNotMatch(inline.safeContext, new RegExp(password));
+});
+
+test('generic project HTTP stays inside Context URL scope and only permits read/auth during bring-up', async () => {
+  const runtime = compileProjectContextRuntime(context);
+  const toolset = createProjectToolset({
+    env: baseEnv,
+    projectConfig: { http: runtime.http },
+    fetcher: async () => assert.fail('blocked request must not reach fetch'),
+  });
+  await assert.rejects(toolset.execute({ type: 'tool_use', name: 'project_http_request', input: {
+    method: 'GET', url: 'https://other.example.test/private',
+  } }), error => error.code === 'project_http_target_not_allowed');
+  await assert.rejects(toolset.execute({ type: 'tool_use', name: 'project_http_request', input: {
+    method: 'POST', url: 'https://timeline.example.test/prefix/api/boards/board-real/change-sets', body: {},
+  } }), error => error.code === 'project_http_method_not_allowed');
 });
 
 async function timelineResponse(url, options) {
@@ -69,23 +90,34 @@ async function timelineResponse(url, options) {
   assert.fail(`unexpected URL ${url}`);
 }
 
-test('every text turn can let DeepSeek read Timeline from project Context and answer without a snapshot', async () => {
+test('the generic server agent follows project Context through auth and data reads without leaking secrets', async () => {
   let modelCalls = 0;
   const fetcher = async (url, options) => {
     if (url === 'https://api.deepseek.com/anthropic/v1/messages') {
       modelCalls++;
       assert.doesNotMatch(options.body, new RegExp(password));
       const body = JSON.parse(options.body);
-      assert.ok(body.tools.some(tool => tool.name === 'timeline_read_board'));
+      assert.deepEqual(body.tools.map(tool => tool.name), ['web_search', 'project_http_request']);
+      assert.match(body.system, /真实的服务器端 HTTP 能力/);
+      assert.match(body.system, /\{\{PROJECT_SECRET_1\}\}/);
       if (modelCalls === 1) {
         assert.deepEqual(body.messages, [
           { role: 'user', content: '帮我看看当前项目的看板。' },
           { role: 'assistant', content: '你具体想了解什么？' },
           { role: 'user', content: '那一共有多少张？' },
         ]);
-        return Response.json({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'context-call', name: 'timeline_read_board', input: {} }] });
+        return Response.json({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'auth-call', name: 'project_http_request', input: {
+          method: 'POST', url: 'https://timeline.example.test/prefix/api/boards/board-real/auth', body: { password: '{{PROJECT_SECRET_1}}' },
+        } }] });
       }
       assert.equal(body.messages.at(-1).content[0].type, 'tool_result');
+      if (modelCalls === 2) {
+        assert.match(body.messages.at(-1).content[0].content, /\{\{PROJECT_SECRET_2\}\}/);
+        assert.doesNotMatch(body.messages.at(-1).content[0].content, /board-token/);
+        return Response.json({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'items-call', name: 'project_http_request', input: {
+          method: 'GET', url: 'https://timeline.example.test/prefix/api/boards/board-real/items', headers: { Authorization: 'Bearer {{PROJECT_SECRET_2}}' },
+        } }] });
+      }
       assert.match(body.messages.at(-1).content[0].content, /真实事项/);
       return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '当前看板共有 1 张卡片。' }] });
     }
@@ -99,7 +131,7 @@ test('every text turn can let DeepSeek read Timeline from project Context and an
   const result = await response.json();
   assert.equal(response.status, 200, JSON.stringify(result));
   assert.deepEqual(result, { reply: '当前看板共有 1 张卡片。', truncated: false });
-  assert.equal(modelCalls, 2);
+  assert.equal(modelCalls, 3);
   assert.doesNotMatch(JSON.stringify(result), new RegExp(password));
 });
 
@@ -128,7 +160,7 @@ test('unrelated chat remains a normal DeepSeek request even when the project con
     fetcher: async (url, options) => {
       assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
       const body = JSON.parse(options.body);
-      assert.deepEqual(body.tools.map(tool => tool.name), ['web_search', 'timeline_read_board']);
+      assert.deepEqual(body.tools.map(tool => tool.name), ['web_search', 'project_http_request']);
       assert.deepEqual(body.tool_choice, { type: 'auto' });
       assert.match(body.system, /工作相关或无关的问题都直接回答/);
       assert.doesNotMatch(options.body, new RegExp(password));

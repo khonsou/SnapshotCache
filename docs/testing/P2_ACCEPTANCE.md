@@ -22,10 +22,10 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：37/37 通过；覆盖用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问、配置 Timeline 后仍正常回答工作无关问题、项目读取保持文本回复且模型主动调用 Timeline 工具，以及时效信息要求 DeepSeek 网页搜索。
+- `npm test`：38/38 通过；覆盖项目上下文编译通用 HTTP 工具、HTTPS 路径边界、读取／登录方法边界、密码和响应 token 的宿主引用、多轮鉴权取数、工作无关问题、快照兼容路径和 DeepSeek 网页搜索。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
 - `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖用户创建项目、在唯一上下文配置 Timeline、内联完整包隔离加载、刷新后消失，以及删除项目连同本地上下文和对话。
-- `node --env-file-if-exists=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；面对“这个看板一共有多少张卡片”时主动选择 `timeline_read_board`，基于受控模拟 Timeline 响应回答“1 张卡片”并标明数据来源；同一工具链按生产默认 7,000 token 上限生成并校验完整快照成功，repairCount=0、4 个资源、9,755 字节。此项未访问真实 Timeline 看板。
+- `node --env-file-if-exists=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；面对“这个看板一共有多少张卡片”时按上下文连续执行 `GET meta → GET agent-doc → POST auth → GET items`，回答“1 张”并标明数据来源。密码和 token 均未进入模型请求。隔离的快照兼容用例也通过，repairCount=0、4 个资源、11,542 字节。工具 HTTP 响应为受控模拟数据，此项未使用真实看板密码。
 - Timeline 公开探测：目标前缀下 `/api/meta` 返回 protocol 19.2、server 1.0.0、`items.read` 等能力与限额；根域同名端点返回 404。公开 `/api/agent-doc` 为降级摘要。
 
 ## 已覆盖
@@ -39,9 +39,9 @@
 - 存储失败会把 run 收敛为 failed，不保留 staging 成功假象。
 - 动态快照可在当前回复打开；首发无持久化路径刷新后消失，不显示项目生成历史。
 - 无 D1/R2 时可返回完整内联包，由当前页面沿用同一校验／隔离链路加载；界面明确提示刷新后消失。
-- 用户项目的对话与上下文共享生命周期；Timeline 地址、board ID 和密码由上下文声明，不维护独立服务器项目／连接注册表。原始上下文是唯一配置，密码仅在发给 DeepSeek 的副本中脱敏。
+- 用户项目的对话与上下文共享生命周期；上下文同时承载背景、数据源配置和 Agent 操作说明，不维护独立服务器项目／连接注册表。密码在模型请求中替换为宿主引用，认证响应中的 token 同样以引用参与后续 HTTP 调用。
 - 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
-- 完整 Timeline 上下文存在时，每轮对话都会向 DeepSeek 提供项目限定的只读工具；模型结合完整对话决定是否调用，不再由末条消息关键词门禁。项目读取、计数和承接上文的追问保持文本回复，不再错误改用公开网页搜索或宣称没有 HTTP／Timeline 能力。
+- 上下文列出 HTTPS 数据源时，每轮对话都会向 DeepSeek 提供限定到相应路径的 `project_http_request`；模型结合完整对话和接入说明决定调用步骤，不再由 Timeline 类型或末条消息关键词门禁。项目读取、计数和承接上文的追问保持文本回复，不再错误改用公开网页搜索或宣称没有 HTTP 能力。
 - 项目上下文不限制话题；配置 Timeline 的项目仍会把工作无关问题作为普通 DeepSeek 对话处理，不强行拉回项目。
 - 普通对话使用 DeepSeek 官方 Anthropic 兼容接口的服务端 `web_search`；“今天微博有什么新闻？”真实调用已产生搜索工具结果并返回来源 URL。OpenAI Responses 兼容接口在当前账号上会静默忽略同名内置工具，因此不作为本项目联网路径。
 

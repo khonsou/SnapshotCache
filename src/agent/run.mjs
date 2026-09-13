@@ -26,29 +26,34 @@ export async function runAgent({ env, project, projectKey, context, messages, re
   if (mode === 'text') {
     try {
       let conversation = messages;
-      for (let round = 0; round < 3; round++) {
+      const tools = toolset?.anthropicDefinitions || [];
+      const toolNames = tools.map(tool => tool.name);
+      for (let round = 0; round < 10; round++) {
         const result = await callWebEnabledModel({
           env,
           messages: conversation,
-          system: textSystemPrompt(project, context, Boolean(toolset)),
+          system: textSystemPrompt(project, context, toolNames),
           fetcher,
           signal,
           maxTokens: 1500,
           forceWebSearch: shouldSearchWeb(text),
-          tools: toolset?.anthropicDefinitions || [],
+          tools,
         });
         if (!result.toolCalls.length) return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
-        if (!toolset || result.toolCalls.length !== 1) throw new AgentToolError('tool_call_required', 422);
-        const call = result.toolCalls[0];
-        const toolResult = await toolset.execute(call);
-        const toolContent = JSON.stringify(toolResult.data);
-        if (toolContent.length > 1500000) throw new AgentToolError('timeline_result_too_large', 502);
+        if (!toolset) throw new AgentToolError('tool_call_required', 422);
+        const toolResults = [];
+        for (const call of result.toolCalls) {
+          const toolResult = await toolset.execute(call);
+          const toolContent = JSON.stringify(toolResult.data);
+          if (toolContent.length > 1500000) throw new AgentToolError('timeline_result_too_large', 502);
+          toolResults.push({ type: 'tool_result', tool_use_id: call.id, content: toolContent });
+        }
         conversation = [...conversation,
           { role: 'assistant', content: result.rawContent },
-          { role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content: toolContent }] },
+          { role: 'user', content: toolResults },
         ];
       }
-      throw new AgentToolError('tool_call_required', 422);
+      throw new AgentToolError('tool_round_limit', 422);
     } catch (error) {
       if (error instanceof ModelError || error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
       throw error;

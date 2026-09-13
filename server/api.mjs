@@ -2,6 +2,7 @@ import { decideResponseMode, validProjectKey } from '../src/agent/intent.mjs';
 import { AgentRunError, runAgent } from '../src/agent/run.mjs';
 import { createSitesSnapshotStore, StoreError } from '../src/platform/store.mjs';
 import { ContextConfigError, inspectTimelineProjectContext } from '../src/platform/context-source.mjs';
+import { compileProjectContextRuntime } from '../src/platform/context-runtime.mjs';
 
 const limits = new Map();
 const MAX_BODY = 100000;
@@ -63,6 +64,13 @@ function errorMessage(code) {
     timeline_unavailable: 'Timeline 服务暂时不可用，请稍后重试。',
     tool_call_required: '模型未按要求调用 Timeline 只读工具，请重试。',
     tool_arguments_invalid: '模型生成的 Timeline 查询条件无效，请重试。',
+    tool_round_limit: '项目数据访问步骤过多，本轮已安全停止，请缩小问题范围后重试。',
+    project_http_url_invalid: '模型生成的数据源地址无效，请重试。',
+    project_http_target_not_allowed: '模型尝试访问项目上下文范围之外的地址，已阻止。',
+    project_http_method_not_allowed: '当前只开放项目数据读取和登录请求。',
+    project_http_header_not_allowed: '模型生成了不允许的数据源请求头，已阻止。',
+    project_http_network_error: '暂时无法连接项目数据源，请稍后重试。',
+    project_http_result_too_large: '项目数据源返回内容过大，无法在本轮处理。',
   })[code] || '快照生成失败，请稍后重试。';
 }
 
@@ -113,9 +121,12 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
     if (error instanceof ContextConfigError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status);
     return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
   }
-  const safeContext = contextSource.safeContext;
+  const contextRuntime = compileProjectContextRuntime(context);
+  const safeContext = contextRuntime.safeContext;
   const resolvedMode = decideResponseMode(latestText, responseMode);
-  const agentProjectConfig = contextSource.source ? { source: contextSource.source, policyVersion: 'user-context-v1' } : null;
+  const agentProjectConfig = contextSource.source || contextRuntime.http
+    ? { source: contextSource.source, http: contextRuntime.http, policyVersion: 'user-context-v1' }
+    : null;
   if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
