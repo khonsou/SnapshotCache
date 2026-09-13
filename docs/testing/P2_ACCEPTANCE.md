@@ -22,7 +22,7 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：38/38 通过；覆盖项目上下文编译通用 HTTP 工具、HTTPS 路径边界、读取／登录方法边界、密码和响应 token 的宿主引用、多轮鉴权取数、工作无关问题、快照兼容路径和 DeepSeek 网页搜索。
+- `npm test`：39/39 通过；覆盖项目上下文编译通用 HTTP 工具、HTTPS 路径边界、读取／登录方法边界、密码和响应 token 的宿主引用、多轮鉴权取数、接入说明缺少绝对地址时禁止静默退化、工作无关问题、快照兼容路径和 DeepSeek 网页搜索。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
 - `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖用户创建项目、在唯一上下文配置 Timeline、内联完整包隔离加载、刷新后消失，以及删除项目连同本地上下文和对话。
 - `node --env-file-if-exists=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；面对“这个看板一共有多少张卡片”时按上下文连续执行 `GET meta → GET agent-doc → POST auth → GET items`，回答“1 张”并标明数据来源。密码和 token 均未进入模型请求。隔离的快照兼容用例也通过，repairCount=0、4 个资源、11,542 字节。工具 HTTP 响应为受控模拟数据，此项未使用真实看板密码。

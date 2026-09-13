@@ -51,5 +51,6 @@ export function compileProjectContextRuntime(context) {
   return {
     safeContext,
     http: allowedPrefixes.length ? { allowedPrefixes, secrets, mode: 'read-auth' } : null,
+    hasAgentInstructions: /(?:\/api\/|agent\s*接入|鉴权|bearer|change-set|change_set)/i.test(rawContext),
   };
 }

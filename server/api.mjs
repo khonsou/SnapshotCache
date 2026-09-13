@@ -71,6 +71,7 @@ function errorMessage(code) {
     project_http_header_not_allowed: '模型生成了不允许的数据源请求头，已阻止。',
     project_http_network_error: '暂时无法连接项目数据源，请稍后重试。',
     project_http_result_too_large: '项目数据源返回内容过大，无法在本轮处理。',
+    project_context_no_http_source: '项目上下文包含 Agent 接入说明，但没有识别到完整的 HTTPS 数据源地址。请把绝对地址与接入说明保存在同一个项目上下文中。',
   })[code] || '快照生成失败，请稍后重试。';
 }
 
@@ -122,11 +123,18 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
     return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
   }
   const contextRuntime = compileProjectContextRuntime(context);
+  if (contextRuntime.hasAgentInstructions && !contextRuntime.http) return json({ error: errorMessage('project_context_no_http_source'), errorCode: 'project_context_no_http_source' }, 400);
   const safeContext = contextRuntime.safeContext;
   const resolvedMode = decideResponseMode(latestText, responseMode);
   const agentProjectConfig = contextSource.source || contextRuntime.http
     ? { source: contextSource.source, http: contextRuntime.http, policyVersion: 'user-context-v1' }
     : null;
+  const agentDiagnostics = local ? {
+    tools: ['web_search', ...(contextRuntime.http ? ['project_http_request'] : contextSource.source ? ['timeline_read_board'] : [])],
+    sourcePaths: contextRuntime.http?.allowedPrefixes.map(item => `${item.origin}${item.pathname}`) || [],
+    secretRefs: contextRuntime.http?.secrets.length || 0,
+    contextChars: context.length,
+  } : null;
   if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
@@ -138,7 +146,7 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
   try {
     if (resolvedMode === 'text') {
       const result = await runAgent({ env, project, projectKey: projectKey || 'text', context: safeContext, messages, requestedMode: 'text', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
-      return json({ reply: result.reply, truncated: result.truncated });
+      return json({ reply: result.reply, truncated: result.truncated, ...(agentDiagnostics ? { agentDiagnostics } : {}) });
     }
     const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
     const createdAt = now().toISOString();

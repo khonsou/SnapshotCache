@@ -26,7 +26,7 @@ const draft = JSON.stringify({
   notes: ['Timeline 真实数据'],
 });
 
-function request(content) {
+function request(content, projectContext = context) {
   const messages = Array.isArray(content) ? content : [{ role: 'user', content }];
   return new Request('https://app.example.test/api/chat', {
     method: 'POST',
@@ -34,7 +34,7 @@ function request(content) {
     body: JSON.stringify({
       project: '用户创建的 Timeline 项目',
       projectKey: 'user-project-1',
-      context,
+      context: projectContext,
       messages,
       responseMode: 'auto',
       idempotencyKey: 'context-source-1',
@@ -74,6 +74,18 @@ test('generic project HTTP stays inside Context URL scope and only permits read/
   await assert.rejects(toolset.execute({ type: 'tool_use', name: 'project_http_request', input: {
     method: 'POST', url: 'https://timeline.example.test/prefix/api/boards/board-real/change-sets', body: {},
   } }), error => error.code === 'project_http_method_not_allowed');
+});
+
+test('Agent instructions without an absolute Context source fail explicitly instead of silently falling back to web search', async () => {
+  const incomplete = '访问说明：先 GET /api/meta，然后 POST /api/boards/:id/auth，再读取 items。';
+  const response = await handleChat(request('统计卡片数量', incomplete), baseEnv, {
+    fetcher: async () => assert.fail('invalid Context must fail before the model call'),
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: '项目上下文包含 Agent 接入说明，但没有识别到完整的 HTTPS 数据源地址。请把绝对地址与接入说明保存在同一个项目上下文中。',
+    errorCode: 'project_context_no_http_source',
+  });
 });
 
 async function timelineResponse(url, options) {

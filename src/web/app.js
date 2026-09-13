@@ -112,8 +112,9 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
     if(result.snapshotPackage)registerInlineSnapshotPackage(result);
     chatTurns[project]=[...turns,{role:'assistant',content:result.reply.slice(0,6000)}].slice(-18);
     const note=result.truncated?'<p class="panel-note">回复达到本次长度上限，可以发送“继续”。</p>':'';
+    const agentNote=result.agentDiagnostics?`<p class="panel-note">Agent 工具：${escapeHtml(result.agentDiagnostics.tools.join(' + '))} · 数据源 ${result.agentDiagnostics.sourcePaths.length} · 密钥引用 ${result.agentDiagnostics.secretRefs} · 上下文 ${result.agentDiagnostics.contextChars} 字</p>`:'';
     const generated=result.snapshotRef?dynamicSnapshot(project,result):'';
-    replaceReply(project,token,message('agent',`<p class="message-text agent-reply">${escapeHtml(result.reply)}</p>${generated}${note}`,now,result.snapshotRef?'generated':'hit'));
+    replaceReply(project,token,message('agent',`<p class="message-text agent-reply">${escapeHtml(result.reply)}</p>${generated}${note}${agentNote}`,now,result.snapshotRef?'generated':'hit'));
   } catch(error) {
     if(!pending.has(token))return;
     const errorText=controller.signal.aborted?'回复超时，请稍后重试。':error instanceof TypeError?'无法连接服务，请稍后重试。':error.message;
