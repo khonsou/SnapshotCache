@@ -18,7 +18,7 @@
 
 - R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
 - R0-02 · In progress：普通文本、通用 HTTP Agent 的 Timeline 文本问答和一类 Timeline 工具快照已通过真实 DeepSeek；待真实目标密码验收、第二种表现、空／边界、非法候选／修复和产品复核。
-- R0-03 · Done：39 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除、通用 HTTP 地址／方法边界、密钥引用和缺少绝对数据源地址的显式失败。
+- R0-03 · Done：40 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除、通用 HTTP 地址／方法边界、密钥引用、缺少绝对数据源地址的显式失败，以及模型错误否认已挂载工具时的强制纠错。
 
 ## R1 · Timeline Agent Support 真实数据
 

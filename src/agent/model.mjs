@@ -61,7 +61,7 @@ export async function callModel({ env, messages, system, fetcher = fetch, signal
   };
 }
 
-export async function callWebEnabledModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, forceWebSearch = false, tools = [] }) {
+export async function callWebEnabledModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, forceWebSearch = false, tools = [], toolChoice = null }) {
   if (!env.DEEPSEEK_API_KEY) throw new ModelError('not_configured', 503);
   const searchInstruction = forceWebSearch ? '本轮涉及实时公开信息，必须先调用 web_search，再根据搜索结果回答并附可核验的来源 URL。' : '';
   const result = await providerResponse(fetcher, 'https://api.deepseek.com/anthropic/v1/messages', {
@@ -76,7 +76,7 @@ export async function callWebEnabledModel({ env, messages, system, fetcher = fet
       max_tokens: maxTokens,
       stream: false,
       tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }, ...tools],
-      tool_choice: { type: 'auto' },
+      tool_choice: toolChoice || { type: 'auto' },
     }),
   }, signal);
   const toolCalls = Array.isArray(result.content) ? result.content.filter(part =>

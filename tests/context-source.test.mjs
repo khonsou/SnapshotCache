@@ -88,6 +88,31 @@ test('Agent instructions without an absolute Context source fail explicitly inst
   });
 });
 
+test('a false model claim that project HTTP is unavailable is corrected and forced into a real tool call', async () => {
+  let modelCalls = 0;
+  const fetcher = async (url, options) => {
+    if (url === 'https://api.deepseek.com/anthropic/v1/messages') {
+      modelCalls++;
+      const body = JSON.parse(options.body);
+      if (modelCalls === 1) return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '我当前只有网页搜索，project_http_request 尚未处于可调用状态。' }] });
+      if (modelCalls === 2) {
+        assert.deepEqual(body.tool_choice, { type: 'tool', name: 'project_http_request' });
+        assert.match(body.messages.at(-1).content, /已经挂载且可调用/);
+        return Response.json({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'forced-meta', name: 'project_http_request', input: {
+          method: 'GET', url: 'https://timeline.example.test/prefix/api/meta',
+        } }] });
+      }
+      assert.match(body.messages.at(-1).content[0].content, /19\.2/);
+      return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '已实际调用项目接口，协议版本为 19.2。' }] });
+    }
+    return timelineResponse(url, options);
+  };
+  const response = await handleChat(request('确认项目接口是否可用。'), baseEnv, { fetcher });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { reply: '已实际调用项目接口，协议版本为 19.2。', truncated: false });
+  assert.equal(modelCalls, 3);
+});
+
 async function timelineResponse(url, options) {
   const path = new URL(url).pathname;
   const headers = { 'X-Protocol-Version': '19.2' };
