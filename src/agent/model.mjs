@@ -61,7 +61,7 @@ export async function callModel({ env, messages, system, fetcher = fetch, signal
   };
 }
 
-export async function callWebEnabledModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, forceWebSearch = false }) {
+export async function callWebEnabledModel({ env, messages, system, fetcher = fetch, signal, maxTokens = 1500, forceWebSearch = false, tools = [] }) {
   if (!env.DEEPSEEK_API_KEY) throw new ModelError('not_configured', 503);
   const searchInstruction = forceWebSearch ? '本轮涉及实时公开信息，必须先调用 web_search，再根据搜索结果回答并附可核验的来源 URL。' : '';
   const result = await providerResponse(fetcher, 'https://api.deepseek.com/anthropic/v1/messages', {
@@ -75,18 +75,23 @@ export async function callWebEnabledModel({ env, messages, system, fetcher = fet
       thinking: { type: 'disabled' },
       max_tokens: maxTokens,
       stream: false,
-      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }],
+      tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }, ...tools],
       tool_choice: { type: 'auto' },
     }),
   }, signal);
+  const toolCalls = Array.isArray(result.content) ? result.content.filter(part =>
+    part?.type === 'tool_use' && typeof part.id === 'string' && part.id.length <= 128
+    && typeof part.name === 'string' && part.input && typeof part.input === 'object' && !Array.isArray(part.input)) : [];
+  if (toolCalls.length > 4) throw new ModelError('invalid_reply');
   const content = Array.isArray(result.content) ? result.content
     .filter(part => part?.type === 'text' && typeof part.text === 'string')
     .map(part => part.text)
     .join('\n') : '';
-  if (!content.trim() || content.length > 100000) throw new ModelError('invalid_reply');
+  if ((!content.trim() && !toolCalls.length) || content.length > 100000) throw new ModelError('invalid_reply');
   return {
-    content,
-    toolCalls: [],
+    content: content.trim() ? content : null,
+    toolCalls,
+    rawContent: result.content,
     finishReason: result.stop_reason,
     model: modelName(env),
     truncated: result.stop_reason === 'max_tokens',

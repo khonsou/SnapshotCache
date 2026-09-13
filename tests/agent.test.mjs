@@ -31,9 +31,9 @@ function webReply(content, status = 'completed') {
 test('response mode is explicit or inferred only from clear visualization language', () => {
   assert.equal(decideResponseMode('帮我列出下一步'), 'text');
   assert.equal(decideResponseMode('请生成一个项目看板快照'), 'snapshot');
-  assert.equal(decideResponseMode('请按照 Agent Support 接入指南读取 Timeline，获取项目最新状况。', 'auto', { sourceType: 'timeline' }), 'snapshot');
-  assert.equal(decideResponseMode('看看项目当前进展怎么样', 'auto', { sourceType: 'timeline' }), 'snapshot');
-  assert.equal(decideResponseMode('解释一下 Timeline 是什么', 'auto', { sourceType: 'timeline' }), 'text');
+  assert.equal(decideResponseMode('请按照 Agent Support 接入指南读取 Timeline，获取项目最新状况。', 'auto'), 'text');
+  assert.equal(decideResponseMode('看看项目当前进展怎么样', 'auto'), 'text');
+  assert.equal(decideResponseMode('解释一下 Timeline 是什么', 'auto'), 'text');
   assert.equal(decideResponseMode('请读取 Timeline', 'auto'), 'text');
   assert.equal(decideResponseMode('随便聊聊', 'snapshot'), 'snapshot');
   assert.equal(shouldSearchWeb('今天微博有什么新闻？'), true);
@@ -105,13 +105,16 @@ test('text mode preserves the existing provider contract', async () => {
 });
 
 test('configured Timeline project still answers unrelated questions without project-topic restrictions', async () => {
-  const projectConfig = { source: { type: 'timeline' } };
+  const projectConfig = { source: { type: 'timeline', baseUrl: 'https://timeline.example.test', boardId: 'board', password: 'board-secret' } };
   const result = await runAgent({ ...base, projectConfig, messages: [{ role: 'user', content: '讲一个关于猫的冷笑话' }], requestedMode: 'auto', fetcher: async (url, options) => {
     assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
     const payload = JSON.parse(options.body);
     assert.match(payload.system, /工作相关或无关的问题都直接回答/);
     assert.match(payload.system, /网页搜索/);
+    assert.match(payload.system, /timeline_read_board/);
+    assert.deepEqual(payload.tools.map(tool => tool.name), ['web_search', 'timeline_read_board']);
     assert.doesNotMatch(payload.system, /当前阶段没有联网、Timeline 取数/);
+    assert.doesNotMatch(options.body, /board-secret/);
     return webReply('猫为什么不玩电脑？因为它怕鼠标。');
   } });
   assert.equal(result.mode, 'text');

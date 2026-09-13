@@ -27,7 +27,17 @@ const timelineTool = {
   },
 };
 
+const anthropicTimelineTool = {
+  name: timelineTool.function.name,
+  description: timelineTool.function.description,
+  input_schema: timelineTool.function.parameters,
+};
+
 function parseArguments(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (JSON.stringify(value).length > 2000) throw new AgentToolError('tool_arguments_invalid', 422);
+    return value;
+  }
   if (typeof value !== 'string' || value.length > 2000) throw new AgentToolError('tool_arguments_invalid', 422);
   try {
     const parsed = JSON.parse(value);
@@ -48,10 +58,14 @@ export function createProjectToolset({ env, projectConfig, fetcher = fetch, sign
   }
   return {
     definitions: [timelineTool],
+    anthropicDefinitions: [anthropicTimelineTool],
     async execute(call) {
-      if (!call || call.type !== 'function' || call.function?.name !== 'timeline_read_board') throw new AgentToolError('tool_not_allowed', 422);
+      const anthropic = call?.type === 'tool_use';
+      const name = anthropic ? call.name : call?.function?.name;
+      const input = anthropic ? call.input : call?.function?.arguments;
+      if (!call || (call.type !== 'function' && !anthropic) || name !== 'timeline_read_board') throw new AgentToolError('tool_not_allowed', 422);
       try {
-        const data = await client.readBoard(parseArguments(call.function.arguments));
+        const data = await client.readBoard(parseArguments(input));
         return { name: 'timeline_read_board', data, source: data.source };
       } catch (error) {
         if (error instanceof AgentToolError) throw error;

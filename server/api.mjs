@@ -1,4 +1,4 @@
-import { decideResponseMode, shouldReadProjectSource, validProjectKey } from '../src/agent/intent.mjs';
+import { decideResponseMode, validProjectKey } from '../src/agent/intent.mjs';
 import { AgentRunError, runAgent } from '../src/agent/run.mjs';
 import { createSitesSnapshotStore, StoreError } from '../src/platform/store.mjs';
 import { ContextConfigError, inspectTimelineProjectContext } from '../src/platform/context-source.mjs';
@@ -114,13 +114,8 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
     return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
   }
   const safeContext = contextSource.safeContext;
-  const sourceType = contextSource.declared ? 'timeline' : null;
-  const resolvedMode = decideResponseMode(latestText, responseMode, { sourceType });
-  let agentProjectConfig = null;
-  if (shouldReadProjectSource(latestText, sourceType)) {
-    if (!contextSource.source) return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
-    agentProjectConfig = { source: contextSource.source, policyVersion: 'user-context-v1' };
-  }
+  const resolvedMode = decideResponseMode(latestText, responseMode);
+  const agentProjectConfig = contextSource.source ? { source: contextSource.source, policyVersion: 'user-context-v1' } : null;
   if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);

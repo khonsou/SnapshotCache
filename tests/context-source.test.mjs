@@ -25,6 +25,7 @@ const draft = JSON.stringify({
 });
 
 function request(content) {
+  const messages = Array.isArray(content) ? content : [{ role: 'user', content }];
   return new Request('https://app.example.test/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'oai-authenticated-user-id': 'user-real' },
@@ -32,7 +33,7 @@ function request(content) {
       project: '用户创建的 Timeline 项目',
       projectKey: 'user-project-1',
       context,
-      messages: [{ role: 'user', content }],
+      messages,
       responseMode: 'auto',
       idempotencyKey: 'context-source-1',
     }),
@@ -54,7 +55,55 @@ test('user project context is the sole Timeline connection record and its passwo
   assert.throws(() => resolveContextTimelineSource(context.replace(/Timeline 访问密码：.*/, '')), /timeline_context_invalid/);
 });
 
-test('Timeline read intent uses only the user project context and never sends its password to DeepSeek', async () => {
+async function timelineResponse(url, options) {
+  const path = new URL(url).pathname;
+  const headers = { 'X-Protocol-Version': '19.2' };
+  if (path.endsWith('/api/meta')) return Response.json({ protocol_version: '19.2', capabilities: ['items.read'], features: {}, enums: {} }, { headers });
+  if (path.endsWith('/auth')) {
+    assert.deepEqual(JSON.parse(options.body), { password });
+    return Response.json({ token: 'board-token' }, { headers });
+  }
+  if (path.endsWith('/items')) return Response.json({ items: [{ id: 'one', title: '真实事项' }], board_version: 8 }, { headers });
+  if (path.endsWith('/products')) return Response.json({ products: [] }, { headers });
+  if (path.endsWith('/members')) return Response.json({ members: [] }, { headers });
+  assert.fail(`unexpected URL ${url}`);
+}
+
+test('every text turn can let DeepSeek read Timeline from project Context and answer without a snapshot', async () => {
+  let modelCalls = 0;
+  const fetcher = async (url, options) => {
+    if (url === 'https://api.deepseek.com/anthropic/v1/messages') {
+      modelCalls++;
+      assert.doesNotMatch(options.body, new RegExp(password));
+      const body = JSON.parse(options.body);
+      assert.ok(body.tools.some(tool => tool.name === 'timeline_read_board'));
+      if (modelCalls === 1) {
+        assert.deepEqual(body.messages, [
+          { role: 'user', content: '帮我看看当前项目的看板。' },
+          { role: 'assistant', content: '你具体想了解什么？' },
+          { role: 'user', content: '那一共有多少张？' },
+        ]);
+        return Response.json({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'context-call', name: 'timeline_read_board', input: {} }] });
+      }
+      assert.equal(body.messages.at(-1).content[0].type, 'tool_result');
+      assert.match(body.messages.at(-1).content[0].content, /真实事项/);
+      return Response.json({ stop_reason: 'end_turn', content: [{ type: 'text', text: '当前看板共有 1 张卡片。' }] });
+    }
+    return timelineResponse(url, options);
+  };
+  const response = await handleChat(request([
+    { role: 'user', content: '帮我看看当前项目的看板。' },
+    { role: 'assistant', content: '你具体想了解什么？' },
+    { role: 'user', content: '那一共有多少张？' },
+  ]), baseEnv, { fetcher, idFactory: () => 'unused', now: () => new Date('2026-09-12T12:00:00Z') });
+  const result = await response.json();
+  assert.equal(response.status, 200, JSON.stringify(result));
+  assert.deepEqual(result, { reply: '当前看板共有 1 张卡片。', truncated: false });
+  assert.equal(modelCalls, 2);
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(password));
+});
+
+test('an explicit snapshot request lets DeepSeek choose Timeline and produces a sourced package', async () => {
   let modelCalls = 0;
   const fetcher = async (url, options) => {
     if (url === 'https://api.deepseek.com/chat/completions') {
@@ -63,20 +112,10 @@ test('Timeline read intent uses only the user project context and never sends it
       if (modelCalls === 1) return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'context-call', type: 'function', function: { name: 'timeline_read_board', arguments: '{}' } }] } }] });
       return Response.json({ choices: [{ finish_reason: 'stop', message: { content: draft } }] });
     }
-    const path = new URL(url).pathname;
-    const headers = { 'X-Protocol-Version': '19.2' };
-    if (path.endsWith('/api/meta')) return Response.json({ protocol_version: '19.2', capabilities: ['items.read'], features: {}, enums: {} }, { headers });
-    if (path.endsWith('/auth')) {
-      assert.deepEqual(JSON.parse(options.body), { password });
-      return Response.json({ token: 'board-token' }, { headers });
-    }
-    if (path.endsWith('/items')) return Response.json({ items: [{ id: 'one', title: '真实事项' }], board_version: 8 }, { headers });
-    if (path.endsWith('/products')) return Response.json({ products: [] }, { headers });
-    if (path.endsWith('/members')) return Response.json({ members: [] }, { headers });
-    assert.fail(`unexpected URL ${url}`);
+    return timelineResponse(url, options);
   };
   const ids = ['run', 'snapshot', 'message'];
-  const response = await handleChat(request('读取 Timeline，获取项目最新状况。'), baseEnv, { fetcher, idFactory: () => ids.shift(), now: () => new Date('2026-09-12T12:00:00Z') });
+  const response = await handleChat(request('读取 Timeline 并生成项目快照。'), baseEnv, { fetcher, idFactory: () => ids.shift(), now: () => new Date('2026-09-12T12:00:00Z') });
   const result = await response.json();
   assert.equal(response.status, 200, JSON.stringify(result));
   assert.equal(result.sourceKind, 'timeline');
@@ -89,7 +128,7 @@ test('unrelated chat remains a normal DeepSeek request even when the project con
     fetcher: async (url, options) => {
       assert.equal(url, 'https://api.deepseek.com/anthropic/v1/messages');
       const body = JSON.parse(options.body);
-      assert.deepEqual(body.tools, [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }]);
+      assert.deepEqual(body.tools.map(tool => tool.name), ['web_search', 'timeline_read_board']);
       assert.deepEqual(body.tool_choice, { type: 'auto' });
       assert.match(body.system, /工作相关或无关的问题都直接回答/);
       assert.doesNotMatch(options.body, new RegExp(password));

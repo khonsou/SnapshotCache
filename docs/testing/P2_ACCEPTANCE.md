@@ -1,6 +1,6 @@
 # P2 验收证据（开发中）
 
-日期：2026-09-12
+日期：2026-09-13
 
 状态：本地生产纵向切片通过；目标 Timeline 真实取数因服务端密码未配置而待验收。2026-09-12 产品路线调整后，真实 Sites D1/R2 不再是首发阻断项；本记录不等于公司 OAuth 或阿里云生产验收。
 
@@ -22,15 +22,15 @@
 
 ## 2026-09-12 已执行检查
 
-- `npm test`：36/36 通过；新增用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问、配置 Timeline 后仍正常回答工作无关问题，以及时效信息要求 DeepSeek 网页搜索的回归测试。
+- `npm test`：37/37 通过；覆盖用户项目上下文作为唯一 Timeline 连接记录、密码对 DeepSeek／响应脱敏、无完整连接不访问、配置 Timeline 后仍正常回答工作无关问题、项目读取保持文本回复且模型主动调用 Timeline 工具，以及时效信息要求 DeepSeek 网页搜索。
 - `npm run build`：通过；构建期仍校验 7 个明确标注的 dummy fixture，未读取 `.env`。
 - `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖用户创建项目、在唯一上下文配置 Timeline、内联完整包隔离加载、刷新后消失，以及删除项目连同本地上下文和对话。
-- `node --env-file=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；真实 DeepSeek 选择 `timeline_read_board` 工具后，使用受控模拟 Timeline 响应生成并校验完整快照成功，repairCount=0、4 个资源、9,375 字节。此项未访问真实 Timeline 看板。
+- `node --env-file-if-exists=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；面对“这个看板一共有多少张卡片”时主动选择 `timeline_read_board`，基于受控模拟 Timeline 响应回答“1 张卡片”并标明数据来源；同一工具链按生产默认 7,000 token 上限生成并校验完整快照成功，repairCount=0、4 个资源、9,755 字节。此项未访问真实 Timeline 看板。
 - Timeline 公开探测：目标前缀下 `/api/meta` 返回 protocol 19.2、server 1.0.0、`items.read` 等能力与限额；根域同名端点返回 404。公开 `/api/agent-doc` 为降级摘要。
 
 ## 已覆盖
 
-- 只在明确快照／看板／报告等语义下自动分流，或由受控调用者显式指定快照；普通文本对话回归。
+- 只在明确要求生成快照／可视化／报告时自动分流，或由受控调用者显式指定快照；读取看板和卡片等普通问答保持文本回复。
 - SnapshotDraft 严格字段、MIME、大小和 ID 校验；模型不能设置受信 ID、scope、query 或 hash。
 - 首次候选失败时只回馈结构化错误码，最多修复一次；第二次失败记录 failed，不生成目录。
 - 恶意表现层反例在候选校验阶段被拒绝并修复；P1 CSP/沙箱的网络、宿主读取和自导航反例继续通过。
@@ -41,7 +41,7 @@
 - 无 D1/R2 时可返回完整内联包，由当前页面沿用同一校验／隔离链路加载；界面明确提示刷新后消失。
 - 用户项目的对话与上下文共享生命周期；Timeline 地址、board ID 和密码由上下文声明，不维护独立服务器项目／连接注册表。原始上下文是唯一配置，密码仅在发给 DeepSeek 的副本中脱敏。
 - 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
-- 已配置 Timeline 项目中的读取、查询、最新状态和项目进展类请求会从 `auto` 路由到快照工具链；普通概念讨论仍保留文本回复，且不再错误宣称系统没有 HTTP／Timeline 工具。
+- 完整 Timeline 上下文存在时，每轮对话都会向 DeepSeek 提供项目限定的只读工具；模型结合完整对话决定是否调用，不再由末条消息关键词门禁。项目读取、计数和承接上文的追问保持文本回复，不再错误改用公开网页搜索或宣称没有 HTTP／Timeline 能力。
 - 项目上下文不限制话题；配置 Timeline 的项目仍会把工作无关问题作为普通 DeepSeek 对话处理，不强行拉回项目。
 - 普通对话使用 DeepSeek 官方 Anthropic 兼容接口的服务端 `web_search`；“今天微博有什么新闻？”真实调用已产生搜索工具结果并返回来源 URL。OpenAI Responses 兼容接口在当前账号上会静默忽略同名内置工具，因此不作为本项目联网路径。
 

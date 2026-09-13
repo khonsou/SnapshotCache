@@ -1,6 +1,6 @@
 import { callModel, callWebEnabledModel, ModelError } from './model.mjs';
 import { textSystemPrompt, snapshotSystemPrompt, toolSelectionSystemPrompt } from './prompt.mjs';
-import { decideResponseMode, shouldReadProjectSource, shouldSearchWeb } from './intent.mjs';
+import { decideResponseMode, shouldSearchWeb } from './intent.mjs';
 import { buildQueryContext, buildSnapshotCandidate, parseSnapshotDraft } from './draft.mjs';
 import { AgentToolError, createProjectToolset } from './tools.mjs';
 
@@ -16,14 +16,41 @@ const safeRepairCode = error => /^draft_[a-z_]+$/.test(error?.code || '') ? erro
 
 export async function runAgent({ env, project, projectKey, context, messages, requestedMode = 'auto', actorId, projectConfig = null, fetcher = fetch, signal, now = () => new Date(), idFactory = () => crypto.randomUUID() }) {
   const text = messages.at(-1).content;
-  const sourceType = projectConfig?.source?.type || null;
-  const mode = decideResponseMode(text, requestedMode, { sourceType });
+  const mode = decideResponseMode(text, requestedMode);
+  let toolset;
+  try { toolset = createProjectToolset({ env, projectConfig, fetcher, signal, now }); }
+  catch (error) {
+    if (error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
+    throw error;
+  }
   if (mode === 'text') {
     try {
-      const result = await callWebEnabledModel({ env, messages, system: textSystemPrompt(project, context), fetcher, signal, maxTokens: 1500, forceWebSearch: shouldSearchWeb(text) });
-      return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
+      let conversation = messages;
+      for (let round = 0; round < 3; round++) {
+        const result = await callWebEnabledModel({
+          env,
+          messages: conversation,
+          system: textSystemPrompt(project, context, Boolean(toolset)),
+          fetcher,
+          signal,
+          maxTokens: 1500,
+          forceWebSearch: shouldSearchWeb(text),
+          tools: toolset?.anthropicDefinitions || [],
+        });
+        if (!result.toolCalls.length) return { mode, reply: result.content, truncated: result.truncated, model: result.model, usage: result.usage };
+        if (!toolset || result.toolCalls.length !== 1) throw new AgentToolError('tool_call_required', 422);
+        const call = result.toolCalls[0];
+        const toolResult = await toolset.execute(call);
+        const toolContent = JSON.stringify(toolResult.data);
+        if (toolContent.length > 1500000) throw new AgentToolError('timeline_result_too_large', 502);
+        conversation = [...conversation,
+          { role: 'assistant', content: result.rawContent },
+          { role: 'user', content: [{ type: 'tool_result', tool_use_id: call.id, content: toolContent }] },
+        ];
+      }
+      throw new AgentToolError('tool_call_required', 422);
     } catch (error) {
-      if (error instanceof ModelError) throw new AgentRunError(error.code, error.status);
+      if (error instanceof ModelError || error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
       throw error;
     }
   }
@@ -32,12 +59,6 @@ export async function runAgent({ env, project, projectKey, context, messages, re
   const scope = { tenantId: actorId, projectId: projectKey };
   let source = null;
   let generationMessages = messages;
-  let toolset;
-  try { toolset = shouldReadProjectSource(text, sourceType) ? createProjectToolset({ env, projectConfig, fetcher, signal, now }) : null; }
-  catch (error) {
-    if (error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
-    throw error;
-  }
   if (toolset) {
     let selection;
     try {
@@ -49,17 +70,19 @@ export async function runAgent({ env, project, projectKey, context, messages, re
         signal,
         maxTokens: 1000,
         tools: toolset.definitions,
-        toolChoice: 'required',
+        toolChoice: 'auto',
       });
-      if (selection.toolCalls.length !== 1) throw new AgentToolError('tool_call_required', 422);
-      const toolResult = await toolset.execute(selection.toolCalls[0]);
-      source = toolResult.source;
-      const toolContent = JSON.stringify(toolResult.data);
-      if (toolContent.length > 1500000) throw new AgentToolError('timeline_result_too_large', 502);
-      generationMessages = [...messages,
-        { role: 'assistant', content: selection.content, tool_calls: selection.toolCalls },
-        { role: 'tool', tool_call_id: selection.toolCalls[0].id, content: toolContent },
-      ];
+      if (selection.toolCalls.length > 1) throw new AgentToolError('tool_call_required', 422);
+      if (selection.toolCalls.length === 1) {
+        const toolResult = await toolset.execute(selection.toolCalls[0]);
+        source = toolResult.source;
+        const toolContent = JSON.stringify(toolResult.data);
+        if (toolContent.length > 1500000) throw new AgentToolError('timeline_result_too_large', 502);
+        generationMessages = [...messages,
+          { role: 'assistant', content: selection.content, tool_calls: selection.toolCalls },
+          { role: 'tool', tool_call_id: selection.toolCalls[0].id, content: toolContent },
+        ];
+      }
     } catch (error) {
       if (error instanceof ModelError || error instanceof AgentToolError) throw new AgentRunError(error.code, error.status);
       throw error;

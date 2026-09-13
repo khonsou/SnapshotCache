@@ -1,6 +1,6 @@
 # 研发任务
 
-更新日期：2026-09-12
+更新日期：2026-09-13
 
 当前顺序已确认：**GUI → 快照协议 → 模型接入 → 自由对话生成快照 → Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云生产发布 → 持久化与缓存优化。**
 
@@ -17,15 +17,15 @@
 ## R0 · 冻结当前基线
 
 - R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
-- R0-02 · In progress：普通文本和一类 Timeline 工具快照已通过真实 DeepSeek；待第二种表现、空／边界、非法候选／修复和产品复核。
-- R0-03 · Done：36 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除及 Timeline 最新状态自动路由。
+- R0-02 · In progress：普通文本、Timeline 文本工具问答和一类 Timeline 工具快照已通过真实 DeepSeek；待第二种表现、空／边界、非法候选／修复和产品复核。
+- R0-03 · Done：37 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除，以及 Timeline 工具不依赖关键词或快照路由。
 
 ## R1 · Timeline Agent Support 真实数据
 
 - TL-01 · In progress：实际 API 基址、公开 meta、protocol 19.2、能力和限额已探测；鉴权响应、真实分页、revision 和错误响应待目标密码验证。
-- TL-02 · Implemented：平台无关只读适配器与 `timeline_read_board` 工具白名单已实现；凭据、token、实例和 board 均由服务端配置，测试覆盖 401 单次重试、403 不重试、能力和过滤器拒绝。
-- TL-03 · Implemented：真实模型工具调用已接入快照流程，工具结果记录 source、protocol、revision／观察时间并作为不可信数据处理；受控模拟数据的在线模型评测通过。
-- TL-04 · Blocked：需要在服务端配置目标看板密码后，读取真实数据、验证 401/403/429/超时与字段缺失，并生成至少两类可逐字段核对的快照。
+- TL-02 · Implemented：平台无关只读适配器与 `timeline_read_board` 工具白名单已实现；地址、board 和密码从当前用户项目上下文临时解析，token 只在当次宿主调用中存在。测试覆盖 401 单次重试、403 不重试、能力和过滤器拒绝。
+- TL-03 · Implemented：真实模型工具调用已同时接入普通文本和快照流程，不依赖末条消息关键词；工具结果记录 source、protocol、revision／观察时间并作为不可信数据处理。受控模拟 Timeline 响应的在线模型文本问答与快照评测均通过。
+- TL-04 · Blocked：需要用户在目标项目上下文中配置看板密码后，读取真实数据、验证 401/403/429/超时与字段缺失，并生成至少两类可逐字段核对的快照。
 
 R1 验收：真实 Timeline 只读数据可以稳定生成协议合规快照；没有 dummy 补数、写操作、伪造来源或秘密泄露。
 
