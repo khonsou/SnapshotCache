@@ -121,6 +121,44 @@ test('existing text chat still replies and snapshot reload does not call the mod
   await expect(page.frameLocator('snapshot-viewer iframe').locator('#count')).toHaveText('显示 4 / 4 项');
 });
 
+test('agent markdown is structured, readable and sanitized without changing user messages', async ({ page }) => {
+  const reply = `# 执行结果
+
+- **总卡片**：12
+- [x] 已完成：9
+
+| 状态 | 数量 |
+| --- | ---: |
+| 待办 | \`3\` |
+
+\`\`\`json
+{"ok": true}
+\`\`\`
+
+> 来源：Timeline
+
+[查看文档](https://example.com/docs)
+
+![远程图片](https://example.com/private.png)
+
+<script>window.markdownInjected = true</script><img src="/markdown-should-not-load" onerror="window.markdownInjected = true">`;
+  await page.route('**/api/chat', route => route.fulfill({ json: { reply, truncated: false } }));
+  await loaded(page);
+  await page.locator('#message-input').fill('请用 **Markdown** 给我结果');
+  await page.locator('#composer').evaluate(form => form.requestSubmit());
+  const response = page.locator('.markdown-body').last();
+  await expect(response.getByRole('heading', { name: '执行结果' })).toBeVisible();
+  await expect(response.locator('li')).toHaveCount(2);
+  await expect(response.locator('table')).toBeVisible();
+  await expect(response.locator('pre code')).toContainText('{"ok": true}');
+  await expect(response.locator('blockquote')).toContainText('来源：Timeline');
+  await expect(response.getByRole('link', { name: '查看文档' })).toHaveAttribute('target', '_blank');
+  await expect(response.locator('script, img')).toHaveCount(0);
+  await expect(response.locator('.markdown-image-alt')).toContainText('远程图片');
+  await expect(page.getByText('请用 **Markdown** 给我结果', { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => window.markdownInjected)).toBeUndefined();
+});
+
 test('generated snapshot opens immediately and disappears after refresh without persistence', async ({ page }) => {
   const createdAt = '2026-09-11T14:00:00.000Z';
   const scope = { tenantId: 'local', projectId: 'launch' };

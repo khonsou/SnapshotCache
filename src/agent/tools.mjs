@@ -1,5 +1,3 @@
-import { createTimelineClient, TimelineError } from '../tools/timeline.mjs';
-
 export class AgentToolError extends Error {
   constructor(code, status = 502) {
     super(code);
@@ -8,34 +6,9 @@ export class AgentToolError extends Error {
   }
 }
 
-const timelineTool = {
-  type: 'function',
-  function: {
-    name: 'timeline_read_board',
-    description: '只读查询当前项目获准的 Timeline 看板，返回卡片、产品、成员、协议能力和来源信息。不得用于写入。',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        date: { type: 'string', description: '可选日期过滤，格式以 Timeline 协议为准。' },
-        product_id: { type: 'string', description: '可选产品 ID。' },
-        member: { type: 'string', description: '可选成员 ID。' },
-        status: { type: 'string', description: '可选状态。' },
-        q: { type: 'string', description: '可选文本查询。' },
-      },
-    },
-  },
-};
-
-const anthropicTimelineTool = {
-  name: timelineTool.function.name,
-  description: timelineTool.function.description,
-  input_schema: timelineTool.function.parameters,
-};
-
-const projectHttpTool = {
+export const projectHttpTool = {
   name: 'project_http_request',
-  description: '按照当前项目上下文中的接入说明发起真实服务器端 HTTP 请求。只能访问上下文明确列出的 HTTPS 地址及其子路径；当前阶段允许 GET，以及仅用于登录换取 token 的 POST .../auth。上下文中的 {{PROJECT_SECRET_n}} 可原样放入请求，宿主会代入真实值。',
+  description: '按照当前项目上下文中的接入说明发起真实服务器端 HTTP 请求。只能访问上下文明确列出的 HTTPS 地址及其子路径。允许 GET、登录 POST .../auth，以及受控 change-set 写入：POST .../change-sets 和 POST .../change-sets/:id/commit；commit 必须带 Idempotency-Key。禁止直接 PATCH/PUT/DELETE。上下文中的 {{PROJECT_SECRET_n}} 可原样放入请求，宿主会代入真实值。',
   input_schema: {
     type: 'object',
     additionalProperties: false,
@@ -54,13 +27,14 @@ const RESPONSE_HEADERS = ['content-type', 'x-protocol-version', 'retry-after', '
 const SENSITIVE_RESPONSE_KEY = /(?:^|_)(?:access_?token|refresh_?token|token|password|secret|api_?key)(?:$|_)/i;
 const MAX_HTTP_BODY = 100000;
 const MAX_HTTP_RESPONSE = 1000000;
+const MAX_TOOL_ARGUMENTS = 120000;
 
 function parseArguments(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    if (JSON.stringify(value).length > 2000) throw new AgentToolError('tool_arguments_invalid', 422);
+    if (JSON.stringify(value).length > MAX_TOOL_ARGUMENTS) throw new AgentToolError('tool_arguments_invalid', 422);
     return value;
   }
-  if (typeof value !== 'string' || value.length > 2000) throw new AgentToolError('tool_arguments_invalid', 422);
+  if (typeof value !== 'string' || value.length > MAX_TOOL_ARGUMENTS) throw new AgentToolError('tool_arguments_invalid', 422);
   try {
     const parsed = JSON.parse(value);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
@@ -115,6 +89,25 @@ function requestHeaders(value, vault) {
   return headers;
 }
 
+function postKind(url) {
+  const path = url.pathname.replace(/\/+$/, '');
+  if (/\/auth$/i.test(path)) return 'auth';
+  if (/\/api\/boards\/[^/]+\/change-sets$/i.test(path)) return 'change-set';
+  if (/\/api\/boards\/[^/]+\/change-sets\/[^/]+\/commit$/i.test(path)) return 'commit';
+  return null;
+}
+
+function validateChangeSetBody(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || !Number.isInteger(value.base_version) || value.base_version < 0
+    || typeof value.source !== 'string' || !value.source.trim() || value.source.length > 128
+    || typeof value.actor !== 'string' || !value.actor.trim() || value.actor.length > 128
+    || !Array.isArray(value.operations) || value.operations.length < 1 || value.operations.length > 200
+    || value.operations.some(operation => !operation || typeof operation !== 'object' || Array.isArray(operation))) {
+    throw new AgentToolError('project_http_write_invalid', 422);
+  }
+}
+
 async function responseBody(response) {
   const reader = response.body?.getReader();
   if (!reader) return '';
@@ -136,7 +129,7 @@ async function responseBody(response) {
   return new TextDecoder().decode(bytes);
 }
 
-function createProjectHttpExecutor({ config, fetcher, signal }) {
+export function createProjectHttpExecutor({ config, fetcher = fetch, signal }) {
   const vault = new Map(config.secrets.map(item => [item.placeholder, item.value]));
   let secretIndex = vault.size;
   const nextPlaceholder = () => `{{PROJECT_SECRET_${++secretIndex}}}`;
@@ -145,8 +138,13 @@ function createProjectHttpExecutor({ config, fetcher, signal }) {
     const method = String(input.method || '').toUpperCase();
     if (!['GET', 'POST'].includes(method)) throw new AgentToolError('project_http_method_not_allowed', 422);
     const url = validateHttpTarget(input.url, config.allowedPrefixes);
-    if (method === 'POST' && !/\/auth\/?$/i.test(url.pathname)) throw new AgentToolError('project_http_method_not_allowed', 422);
+    const writeKind = method === 'POST' ? postKind(url) : null;
+    if (method === 'POST' && !writeKind) throw new AgentToolError('project_http_method_not_allowed', 422);
     const headers = requestHeaders(input.headers, vault);
+    if (writeKind === 'change-set') validateChangeSetBody(input.body);
+    if (writeKind === 'commit' && !Object.entries(headers).some(([name, value]) => name.toLowerCase() === 'idempotency-key' && value.trim())) {
+      throw new AgentToolError('project_http_idempotency_required', 422);
+    }
     let body;
     if (input.body !== undefined) {
       const resolved = replaceSecrets(input.body, vault);
@@ -177,42 +175,5 @@ function createProjectHttpExecutor({ config, fetcher, signal }) {
       if (value) responseHeaders[name] = value;
     }
     return { status: response.status, ok: response.ok, headers: responseHeaders, body: safeBody };
-  };
-}
-
-export function createProjectToolset({ env, projectConfig, fetcher = fetch, signal, now }) {
-  const hasTimeline = projectConfig?.source?.type === 'timeline';
-  const hasHttp = Boolean(projectConfig?.http);
-  if (!hasTimeline && !hasHttp) return null;
-  let client = null;
-  if (hasTimeline) {
-    const password = projectConfig.source.password || env[projectConfig.source.credentialEnv];
-    const { password: _password, credentialEnv: _credentialEnv, ...clientSource } = projectConfig.source;
-    try { client = createTimelineClient({ ...clientSource, password, fetcher, signal, now }); }
-    catch (error) {
-      if (error instanceof TimelineError) throw new AgentToolError(error.code, error.status);
-      throw error;
-    }
-  }
-  const executeHttp = hasHttp ? createProjectHttpExecutor({ config: projectConfig.http, fetcher, signal }) : null;
-  return {
-    definitions: hasTimeline ? [timelineTool] : [],
-    anthropicDefinitions: hasHttp ? [projectHttpTool] : (hasTimeline ? [anthropicTimelineTool] : []),
-    async execute(call) {
-      const anthropic = call?.type === 'tool_use';
-      const name = anthropic ? call.name : call?.function?.name;
-      const input = anthropic ? call.input : call?.function?.arguments;
-      if (!call || (call.type !== 'function' && !anthropic)) throw new AgentToolError('tool_not_allowed', 422);
-      if (anthropic && name === 'project_http_request' && executeHttp) return { name, data: await executeHttp(call), source: null };
-      if (name !== 'timeline_read_board' || !client) throw new AgentToolError('tool_not_allowed', 422);
-      try {
-        const data = await client.readBoard(parseArguments(input));
-        return { name: 'timeline_read_board', data, source: data.source };
-      } catch (error) {
-        if (error instanceof AgentToolError) throw error;
-        if (error instanceof TimelineError) throw new AgentToolError(error.code, error.status);
-        throw new AgentToolError('timeline_unavailable');
-      }
-    },
   };
 }

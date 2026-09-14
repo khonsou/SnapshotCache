@@ -50,7 +50,6 @@ export function compileProjectContextRuntime(context) {
   const allowedPrefixes = uniquePrefixes(rawContext);
   return {
     safeContext,
-    http: allowedPrefixes.length ? { allowedPrefixes, secrets, mode: 'read-auth' } : null,
-    hasAgentInstructions: /(?:\/api\/|agent\s*接入|鉴权|bearer|change-set|change_set)/i.test(rawContext),
+    http: allowedPrefixes.length ? { allowedPrefixes, secrets, mode: 'read-auth-change-set' } : null,
   };
 }

@@ -1,7 +1,6 @@
-import { decideResponseMode, validProjectKey } from '../src/agent/intent.mjs';
+import { validProjectKey } from '../src/agent/intent.mjs';
 import { AgentRunError, runAgent } from '../src/agent/run.mjs';
 import { createSitesSnapshotStore, StoreError } from '../src/platform/store.mjs';
-import { ContextConfigError, inspectTimelineProjectContext } from '../src/platform/context-source.mjs';
 import { compileProjectContextRuntime } from '../src/platform/context-runtime.mjs';
 
 const limits = new Map();
@@ -41,6 +40,11 @@ function errorMessage(code) {
     network_error: '暂时无法连接模型服务，请稍后重试。',
     timeout: '回复超时，请稍后重试。',
     invalid_reply: '模型没有返回有效回复，请重试。',
+    agent_runtime_unavailable: 'Agent Runtime 尚未安装或没有接入当前服务。',
+    agent_runtime_failed: 'Agent Runtime 本轮执行失败，请稍后重试。',
+    agent_runtime_invalid_result: 'Agent Runtime 没有提交有效结果，请重试。',
+    agent_runtime_output_too_large: 'Agent Runtime 返回内容过大，本轮已停止。',
+    snapshot_not_submitted: 'Agent Runtime 没有按要求提交快照候选。',
     storage_unavailable: '快照存储尚未配置，当前只能使用文本回复。',
     storage_failed: '快照写入失败，本次结果未提交，请稍后重试。',
     storage_verification_failed: '快照写入后校验失败，本次结果未提交。',
@@ -50,7 +54,6 @@ function errorMessage(code) {
     project_not_found: '当前项目不存在或尚未配置。',
     project_config_invalid: '服务端项目配置无效，请联系管理员。',
     timeline_not_configured: 'Timeline 数据源尚未配置凭据，请联系管理员。',
-    timeline_context_invalid: '项目上下文中的 Timeline 连接信息不完整或格式不正确。',
     timeline_unauthorized: 'Timeline 登录已失效，请重试。',
     timeline_forbidden: 'Timeline 凭据无效或当前看板拒绝访问。',
     timeline_not_found: 'Timeline 看板或资源不存在。',
@@ -62,16 +65,15 @@ function errorMessage(code) {
     timeline_read_unsupported: '当前 Timeline 实例未开放只读取数能力。',
     timeline_result_too_large: 'Timeline 返回数据过大，暂时无法生成快照。',
     timeline_unavailable: 'Timeline 服务暂时不可用，请稍后重试。',
-    tool_call_required: '模型未按要求调用 Timeline 只读工具，请重试。',
     tool_arguments_invalid: '模型生成的 Timeline 查询条件无效，请重试。',
-    tool_round_limit: '项目数据访问步骤过多，本轮已安全停止，请缩小问题范围后重试。',
     project_http_url_invalid: '模型生成的数据源地址无效，请重试。',
     project_http_target_not_allowed: '模型尝试访问项目上下文范围之外的地址，已阻止。',
-    project_http_method_not_allowed: '当前只开放项目数据读取和登录请求。',
+    project_http_method_not_allowed: '当前只开放项目数据读取、登录和受控 change-set 写入。',
+    project_http_write_invalid: 'Agent 生成的 change-set 缺少有效的版本、来源、操作者或操作列表。',
+    project_http_idempotency_required: '提交 change-set 必须携带有效的 Idempotency-Key。',
     project_http_header_not_allowed: '模型生成了不允许的数据源请求头，已阻止。',
     project_http_network_error: '暂时无法连接项目数据源，请稍后重试。',
     project_http_result_too_large: '项目数据源返回内容过大，无法在本轮处理。',
-    project_context_no_http_source: '项目上下文包含 Agent 接入说明，但没有识别到完整的 HTTPS 数据源地址。请把绝对地址与接入说明保存在同一个项目上下文中。',
   })[code] || '快照生成失败，请稍后重试。';
 }
 
@@ -100,7 +102,7 @@ function acquireLimit(user) {
   return limit;
 }
 
-export async function handleChat(request, env, { local = false, fetcher = fetch, store, now = () => new Date(), idFactory = () => crypto.randomUUID() } = {}) {
+export async function handleChat(request, env, { local = false, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID() } = {}) {
   if (request.method !== 'POST') return json({ error: '请使用 POST 请求。' }, 405);
   const user = local ? 'local' : request.headers.get('oai-authenticated-user-id');
   if (!user) return json({ error: '请先登录后使用序言。' }, 401);
@@ -115,44 +117,46 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
   const project = submittedProject;
   const context = submittedContext;
   if (!validText(project, 80) || !project.trim() || !validText(context, 10000)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
-  const latestText = messages.at(-1).content;
-  let contextSource;
-  try { contextSource = inspectTimelineProjectContext(context); }
-  catch (error) {
-    if (error instanceof ContextConfigError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status);
-    return json({ error: errorMessage('timeline_context_invalid'), errorCode: 'timeline_context_invalid' }, 400);
-  }
   const contextRuntime = compileProjectContextRuntime(context);
-  if (contextRuntime.hasAgentInstructions && !contextRuntime.http) return json({ error: errorMessage('project_context_no_http_source'), errorCode: 'project_context_no_http_source' }, 400);
   const safeContext = contextRuntime.safeContext;
-  const resolvedMode = decideResponseMode(latestText, responseMode);
-  const agentProjectConfig = contextSource.source || contextRuntime.http
-    ? { source: contextSource.source, http: contextRuntime.http, policyVersion: 'user-context-v1' }
+  const agentProjectConfig = contextRuntime.http
+    ? { http: contextRuntime.http, policyVersion: 'user-context-v1' }
     : null;
-  const agentDiagnostics = local ? {
-    tools: ['web_search', ...(contextRuntime.http ? ['project_http_request'] : contextSource.source ? ['timeline_read_board'] : [])],
-    sourcePaths: contextRuntime.http?.allowedPrefixes.map(item => `${item.origin}${item.pathname}`) || [],
-    secretRefs: contextRuntime.http?.secrets.length || 0,
-    contextChars: context.length,
-  } : null;
-  if (resolvedMode === 'snapshot' && (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim())) return json({ error: '快照请求缺少有效的项目或幂等标识。' }, 400);
+  if (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim()) return json({ error: '请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
   const controller = new AbortController();
   const abort = () => controller.abort();
   request.signal.addEventListener('abort', abort, { once: true });
   if (request.signal.aborted) abort();
-  const timer = setTimeout(abort, resolvedMode === 'snapshot' ? 90000 : 45000);
+  const timer = setTimeout(abort, responseMode === 'text' ? 90000 : 180000);
   try {
-    if (resolvedMode === 'text') {
-      const result = await runAgent({ env, project, projectKey: projectKey || 'text', context: safeContext, messages, requestedMode: 'text', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
-      return json({ reply: result.reply, truncated: result.truncated, ...(agentDiagnostics ? { agentDiagnostics } : {}) });
-    }
-    const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
     const createdAt = now().toISOString();
     const runId = `run-${idFactory()}`;
+    const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
+    let started = null;
+    if (responseMode === 'snapshot' && snapshotStore) {
+      started = await snapshotStore.startRun({ runId, actorId: user, projectKey, idempotencyKey, requestedMode: responseMode, modelConfigVersion: 'deepseek-claude-runtime-v1', contractVersion: 'p2-1', createdAt });
+      if (!started.created) {
+        if (started.run.status === 'committed') {
+          const record = await snapshotStore.getRecord({ actorId: user, projectKey, snapshotId: started.run.snapshotId });
+          if (!record) throw new StoreError('snapshot_not_found', 404);
+          return json({ reply: started.run.reply, runId: started.run.runId, snapshotStatus: 'generated', snapshotRef: { snapshotId: record.snapshotId, manifestHash: record.manifestHash }, scope: { tenantId: user, projectId: projectKey }, title: record.title, messageId: record.messageId, truncated: false });
+        }
+        return json({ error: started.run.status === 'staging' ? '相同请求正在生成，请稍后重试。' : errorMessage(started.run.errorCode), runId: started.run.runId }, started.run.status === 'staging' ? 409 : 422);
+      }
+    }
+    let result;
+    try {
+      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: responseMode, actorId: user, projectConfig: agentProjectConfig, runtime, signal: controller.signal, now, idFactory });
+    } catch (error) {
+      if (started?.created) await snapshotStore.failRun({ runId, actorId: user, projectKey, errorCode: error.code || 'agent_runtime_failed', repairCount: error.repairCount || 0, finishedAt: now().toISOString() });
+      throw error;
+    }
+    if (result.mode === 'text') {
+      return json({ reply: result.reply, runId, agentRun: result.runtime, truncated: result.truncated });
+    }
     if (!snapshotStore) {
-      const result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: 'snapshot', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
       const messageId = `msg-${idFactory()}`;
       const generation = result.candidate.manifest.extensions['com.xuyan.generation'];
       return json({
@@ -167,25 +171,20 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
         source: generation.source,
         title: result.candidate.title,
         messageId,
+        agentRun: result.runtime,
         truncated: result.truncated,
       });
     }
-    const started = await snapshotStore.startRun({ runId, actorId: user, projectKey, idempotencyKey, requestedMode: responseMode, modelConfigVersion: 'deepseek-v1', contractVersion: 'p2-1', createdAt });
-    if (!started.created) {
-      if (started.run.status === 'committed') {
-        const record = await snapshotStore.getRecord({ actorId: user, projectKey, snapshotId: started.run.snapshotId });
-        if (!record) throw new StoreError('snapshot_not_found', 404);
-        return json({ reply: started.run.reply, runId: started.run.runId, snapshotStatus: 'generated', snapshotRef: { snapshotId: record.snapshotId, manifestHash: record.manifestHash }, scope: { tenantId: user, projectId: projectKey }, title: record.title, messageId: record.messageId, truncated: false });
+    if (!started) {
+      started = await snapshotStore.startRun({ runId, actorId: user, projectKey, idempotencyKey, requestedMode: responseMode, modelConfigVersion: 'deepseek-claude-runtime-v1', contractVersion: 'p2-1', createdAt });
+      if (!started.created) {
+        if (started.run.status === 'committed') {
+          const record = await snapshotStore.getRecord({ actorId: user, projectKey, snapshotId: started.run.snapshotId });
+          if (!record) throw new StoreError('snapshot_not_found', 404);
+          return json({ reply: started.run.reply, runId: started.run.runId, snapshotStatus: 'generated', snapshotRef: { snapshotId: record.snapshotId, manifestHash: record.manifestHash }, scope: { tenantId: user, projectId: projectKey }, title: record.title, messageId: record.messageId, truncated: false });
+        }
+        return json({ error: started.run.status === 'staging' ? '相同请求正在生成，请稍后重试。' : errorMessage(started.run.errorCode), runId: started.run.runId }, started.run.status === 'staging' ? 409 : 422);
       }
-      return json({ error: started.run.status === 'staging' ? '相同请求正在生成，请稍后重试。' : errorMessage(started.run.errorCode), runId: started.run.runId }, started.run.status === 'staging' ? 409 : 422);
-    }
-    let result;
-    try {
-      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: 'snapshot', actorId: user, projectConfig: agentProjectConfig, fetcher, signal: controller.signal, now, idFactory });
-    } catch (error) {
-      const code = error.code || 'candidate_validation_failed';
-      await snapshotStore.failRun({ runId, actorId: user, projectKey, errorCode: code, repairCount: error.repairCount || 0, finishedAt: now().toISOString() });
-      throw error;
     }
     const committedAt = now().toISOString();
     const messageId = `msg-${idFactory()}`;
@@ -198,7 +197,7 @@ export async function handleChat(request, env, { local = false, fetcher = fetch,
       if (error instanceof StoreError) throw error;
       throw new StoreError(code, 503);
     }
-    return json({ reply: result.reply, runId, snapshotStatus: 'generated', snapshotPersistence: 'stored', snapshotRef: { snapshotId: committed.snapshotId, manifestHash: committed.manifestHash }, scope: { tenantId: user, projectId: projectKey }, sourceKind: committed.sourceKind, title: committed.title, messageId, truncated: result.truncated });
+    return json({ reply: result.reply, runId, snapshotStatus: 'generated', snapshotPersistence: 'stored', snapshotRef: { snapshotId: committed.snapshotId, manifestHash: committed.manifestHash }, scope: { tenantId: user, projectId: projectKey }, sourceKind: committed.sourceKind, title: committed.title, messageId, agentRun: result.runtime, truncated: result.truncated });
   } catch (error) {
     if (error instanceof AgentRunError || error instanceof StoreError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status || 502);
     return json({ error: controller.signal.aborted ? errorMessage('timeout') : errorMessage('provider_unavailable') }, controller.signal.aborted ? 504 : 502);

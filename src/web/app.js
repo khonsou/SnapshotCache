@@ -1,4 +1,5 @@
 import { registerInlineSnapshotPackage, snapshotCatalog } from './snapshots.mjs';
+import { renderAgentMarkdown } from './markdown.js';
 'use strict';
 const icon = (name) => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -102,7 +103,7 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
   const controller=new AbortController();activeRequests.set(project,controller);
   pending.add(token);histories[project]=list.innerHTML;syncInput();scrollDown();
   const turns=[...(chatTurns[project]||[]).slice(-18),{role:'user',content:text}];
-  const timeout=setTimeout(()=>controller.abort(),55000);
+  const timeout=setTimeout(()=>controller.abort(),175000);
   try {
     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
       body:JSON.stringify({project:projects[project].title,projectKey:project,context:directory.getContext(project),messages:turns,responseMode:'auto',idempotencyKey})});
@@ -112,9 +113,10 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
     if(result.snapshotPackage)registerInlineSnapshotPackage(result);
     chatTurns[project]=[...turns,{role:'assistant',content:result.reply.slice(0,6000)}].slice(-18);
     const note=result.truncated?'<p class="panel-note">回复达到本次长度上限，可以发送“继续”。</p>':'';
-    const agentNote=result.agentDiagnostics?`<p class="panel-note">Agent 工具：${escapeHtml(result.agentDiagnostics.tools.join(' + '))} · 数据源 ${result.agentDiagnostics.sourcePaths.length} · 密钥引用 ${result.agentDiagnostics.secretRefs} · 上下文 ${result.agentDiagnostics.contextChars} 字</p>`:'';
+    const runtime=result.agentRun;
+    const runtimeNote=runtime?`<p class="panel-note">Agent Runtime：${escapeHtml(runtime.name)} · 模型 ${escapeHtml(runtime.model||'DeepSeek')}${runtime.turns?` · ${runtime.turns} 轮`:''}${runtime.toolsUsed?.length?` · 工具 ${escapeHtml(runtime.toolsUsed.join('、'))}`:''}</p>`:'';
     const generated=result.snapshotRef?dynamicSnapshot(project,result):'';
-    replaceReply(project,token,message('agent',`<p class="message-text agent-reply">${escapeHtml(result.reply)}</p>${generated}${note}${agentNote}`,now,result.snapshotRef?'generated':'hit'));
+    replaceReply(project,token,message('agent',`<div class="agent-reply markdown-body">${renderAgentMarkdown(result.reply)}</div>${generated}${note}${runtimeNote}`,now,result.snapshotRef?'generated':'hit'));
   } catch(error) {
     if(!pending.has(token))return;
     const errorText=controller.signal.aborted?'回复超时，请稍后重试。':error instanceof TypeError?'无法连接服务，请稍后重试。':error.message;

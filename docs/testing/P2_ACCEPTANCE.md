@@ -1,8 +1,8 @@
 # P2 验收证据（开发中）
 
-日期：2026-09-13
+日期：2026-09-14
 
-状态：本地生产纵向切片通过；目标 Timeline 真实取数因服务端密码未配置而待验收。2026-09-12 产品路线调整后，真实 Sites D1/R2 不再是首发阻断项；本记录不等于公司 OAuth 或阿里云生产验收。
+状态：Claude Code Agent Runtime 重构已通过 Node 测试、构建、浏览器回归和真实 DeepSeek 冒烟；目标 Timeline 真实读取已由人工验收，受控 change-set 写入待验收。2026-09-12 产品路线调整后，真实 Sites D1/R2 不再是首发阻断项；本记录不等于公司 OAuth 或阿里云生产验收。
 
 路线说明：D1/R2 相关检查继续记录原型能力，但生产首发以 `docs/PRODUCTION_RELEASE_PLAN_2026-09-12.md` 为准。首发允许无状态，必须明确刷新和历史回放限制。
 
@@ -28,22 +28,47 @@
 - `node --env-file-if-exists=.env scripts/eval-live-model.mjs`：真实 DeepSeek 普通文本调用成功；面对“这个看板一共有多少张卡片”时按上下文连续执行 `GET meta → GET agent-doc → POST auth → GET items`，回答“1 张卡片”并标明数据来源。密码和 token 均未进入模型请求。隔离的快照兼容用例也通过，repairCount=0、4 个资源、8,804 字节。工具 HTTP 响应为受控模拟数据，此项未使用真实看板密码。
 - Timeline 公开探测：目标前缀下 `/api/meta` 返回 protocol 19.2、server 1.0.0、`items.read` 等能力与限额；根域同名端点返回 404。公开 `/api/agent-doc` 为降级摘要。
 
+以上 2026-09-12 在线模型／工具循环证据属于重构前实现，仅作为历史记录，不代表当前 Claude Code Runtime 已完成目标 Timeline 验收。
+
+## 2026-09-13 Agent Runtime 重构证据
+
+- 撤销未提交的拒绝纠正／调用轨迹补丁；删除关键词响应分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环。
+- 固定 `@anthropic-ai/claude-code@2.1.270`；Claude Code 只作为服务器端 Agent 执行框架，本地 Node 每个请求启动无持久化会话，模型 endpoint、key 与计费均使用 DeepSeek，并只加载请求级 MCP。
+- `npm test`：41/41 通过；新增 Agent Runtime 注入、失败关闭、临时目录、项目内固定二进制、工具白名单、MCP 快照提交、密钥隔离，以及“询问现有看板必须文本回答”的 Agent 合约测试。
+- `npm run build`：通过；构建期校验 7 个 dummy fixture。Worker 不具备 Node 子进程 Runtime 时聊天明确失败，不回退到普通模型补全。
+- 真实 DeepSeek 文本冒烟：Claude Code Runtime 返回有效 session、Agent turns 和 `provider: deepseek`／`model: deepseek-v4-flash`，正常文本结果。
+- 真实 DeepSeek 快照冒烟：Claude Code Runtime 在 2 个 Agent turns 中实际调用 `submit_snapshot`，宿主生成 `项目进度快照` 并通过统一快照校验，来源正确标为 `user-provided`。
+- 真实 DeepSeek 项目 HTTP 冒烟：请求经 `POST /api/chat` 进入 Claude Code Runtime，在 2 个 Agent turns 中实际调用 `project_http_request`，成功读取目标 Timeline 前缀下的公开 `/api/meta`，返回 protocol 19.2、server 1.0.0、能力和限额；响应含真实 session ID 及工具调用记录。此项未使用项目密码，不代表 auth／items 已验收。
+- 与人工问题相同的“统计项目看板总卡片数，其中未完成多少”使用 `responseMode: auto` 实测返回 `mode: text`，只调用 `project_http_request`，未调用 `submit_snapshot`；无密码诊断从公开 boards 列表确认总数 177，对需要卡片明细的未完成数明确报告需鉴权。
+- 真实 DeepSeek WebSearch 冒烟：升级 Claude Code 2.1.270 并移除会禁用服务器侧工具的 `--bare` 后，DeepSeek `deepseek-v4-flash` 在 2 个 Agent turns 中实际调用 WebSearch，返回 DeepSeek 官方文档标题与 URL。
+- 多步失败根因：旧运行时的默认 `--max-budget-usd 0.20` 使用框架成本估算提前终止，错误 subtype 为 `error_max_budget_usd`；默认预算上限已移除，仅在运维显式配置正数时启用，HTTP 超时和并发限制继续生效。
+- `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景；覆盖项目创建、上下文配置、聊天／快照现有交互、刷新重置和项目删除清理。
+- 2026-09-14 人工验收确认目标 Timeline 真实读取已通过。宿主随后开放受控 `POST .../change-sets` 和带 `Idempotency-Key` 的 `POST .../change-sets/:id/commit`；单元测试覆盖合法提案，以及任意 POST、非法结构和缺失幂等键的拒绝。本轮未向真实看板发送写请求。
+- 加入 Markdown 表现层依赖后，`npm audit --omit=dev --json` 报告 15 个生产依赖中 0 个已知漏洞；完整依赖树仍有 4 个 moderate 开发依赖问题。
+
 ## 已覆盖
 
-- 只在明确要求生成快照／可视化／报告时自动分流，或由受控调用者显式指定快照；读取看板和卡片等普通问答保持文本回复。
+- 2026-09-14 受控写权限变更后重跑 `npm run check`：41/41 Node 通过，Worker 构建和 7 个 fixture 校验通过。
+- 2026-09-14 重跑 `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景。
+- 2026-09-14 Markdown 表现层变更后再次执行 `npm run check`：41/41 Node、Worker 构建和 7 个 fixture 通过；`npm run test:e2e`：26/26 通过。新场景在 Chromium 与 WebKit 验证标题、列表、表格、代码块、引用、外链、用户纯文本保留，以及 script／img 不进入 DOM。
+- 2026-09-14 产品负责人已在本地对话页完成 Markdown 表现层人工验收并确认通过。
+- 写入工具单元证据使用模拟 HTTP 宿主，未向真实 Timeline 提交 change-set；真实写入结果必须以页面手工测试与写后回读为准。
+
+- 每轮请求都进入 Agent Runtime；Agent 根据完整对话理解明确的快照／可视化要求，或遵循受控调用者显式模式。读取看板和卡片等普通问答保持文本回复，宿主不做语义关键词匹配。
 - SnapshotDraft 严格字段、MIME、大小和 ID 校验；模型不能设置受信 ID、scope、query 或 hash。
-- 首次候选失败时只回馈结构化错误码，最多修复一次；第二次失败记录 failed，不生成目录。
-- 恶意表现层反例在候选校验阶段被拒绝并修复；P1 CSP/沙箱的网络、宿主读取和自导航反例继续通过。
+- Agent 通过 `submit_snapshot` MCP 提交一次完整候选；候选校验失败即明确失败，不用宿主 prompt 规则尝试修复，也不生成目录。
+- 恶意表现层反例在候选校验阶段被拒绝；P1 CSP/沙箱的网络、宿主读取和自导航反例继续通过。
 - 同一用户／项目／幂等键只提交一次；重放不再调用模型。
 - 不同用户或项目读取目录、manifest 和资源时返回 404。
 - 存储失败会把 run 收敛为 failed，不保留 staging 成功假象。
 - 动态快照可在当前回复打开；首发无持久化路径刷新后消失，不显示项目生成历史。
 - 无 D1/R2 时可返回完整内联包，由当前页面沿用同一校验／隔离链路加载；界面明确提示刷新后消失。
 - 用户项目的对话与上下文共享生命周期；上下文同时承载背景、数据源配置和 Agent 操作说明，不维护独立服务器项目／连接注册表。密码在模型请求中替换为宿主引用，认证响应中的 token 同样以引用参与后续 HTTP 调用。
-- 模型仅能调用一个只读 Timeline 工具；目标实例、board 和密码引用不可由模型改变，密码与 token 未进入模型请求或快照。
-- 上下文列出 HTTPS 数据源时，每轮对话都会向 DeepSeek 提供限定到相应路径的 `project_http_request`；模型结合完整对话和接入说明决定调用步骤，不再由 Timeline 类型或末条消息关键词门禁。项目读取、计数和承接上文的追问保持文本回复，不再错误改用公开网页搜索或宣称没有 HTTP 能力。
+- Claude Code Runtime 没有 Bash、文件读写或任意 WebFetch；只开放 WebSearch、限定到上下文 HTTPS 路径的 `project_http_request` 和 `submit_snapshot`。项目 HTTP 宿主只允许 GET、登录 auth POST、校验后的 change-set 创建和带幂等键 commit；密码与响应 token 只存在于临时 MCP 宿主引用中。
+- 上下文列出 HTTPS 数据源时，每轮 Agent 会话都加载相应 `project_http_request`；是否调用以及调用步骤由 Agent 结合完整对话决定，不再由 Timeline 类型、末条消息关键词或拒绝话术正则驱动。
+- 上下文没有绝对 HTTPS 地址时仍正常进入 Agent Runtime，只是不挂载项目 HTTP 工具；宿主不再用“像不像 Agent 指南”的正则提前拒绝请求。
 - 项目上下文不限制话题；配置 Timeline 的项目仍会把工作无关问题作为普通 DeepSeek 对话处理，不强行拉回项目。
-- 普通对话使用 DeepSeek 官方 Anthropic 兼容接口的服务端 `web_search`；“今天微博有什么新闻？”真实调用已产生搜索工具结果并返回来源 URL。OpenAI Responses 兼容接口在当前账号上会静默忽略同名内置工具，因此不作为本项目联网路径。
+- 普通对话由 Claude Code Runtime 使用 DeepSeek 官方 Anthropic 兼容接口；WebSearch 是允许的运行时工具，是否使用由 Agent 决定。
 
 ## 原 P2 尚未执行的验收
 

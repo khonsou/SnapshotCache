@@ -1,4 +1,4 @@
-# 实现状态 · 2026-09-13
+# 实现状态 · 2026-09-14
 
 GUI、快照协议、文本模型和自由对话生成快照已经形成可工作的本地基线。下一主线改为 Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云预发布／生产；缓存和跨会话持久化移到发布后，不再阻断首发。当前尚未发布。
 
@@ -12,18 +12,19 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 
 ## 已实现的生产首发切片
 
-- 基于明确意图的文本／快照分流，以及 DeepSeek 模型适配、严格 `SnapshotDraft` 契约和最多一次修复。
+- 网页请求现在进入固定版本的 Claude Code Agent Runtime；Claude Code 仅作为执行框架，所有推理请求、API key、模型与计费均指向 DeepSeek Anthropic 兼容接口。文本／快照由 Agent 在同一运行时内决定，快照通过 `submit_snapshot` MCP 提交并继续执行严格 `SnapshotDraft` 校验。
 - 模型只能产生不可信候选；snapshot/run/message ID、scope、query、时间、hash 和提交状态由服务端生成并复用 P1 统一校验。
 - Sites `DB`/`BUCKET` 绑定声明、D1 Drizzle schema 与两个初始迁移；R2 资源先写、回读校验后才在 D1 登记 committed。
 - 已保留快照 run、幂等提交和持久化路由原型，首发生产路由当前不启用这些能力。
 - 聊天中可校验并展示响应携带的完整快照包；当前页面刷新后消失，不声称已保存或可历史回放。
-- Timeline Agent Support 只读适配器：协议发现、密码换 token、分页读取 items/products/members、401 单次重鉴权，以及 403/429/超时/协议错误的失败收敛；工具参数和目标实例由服务端白名单限制。
-- 用户项目与上下文：用户可新建、重命名、归档和删除项目；删除会同时清理当前页面中的上下文、对话、成员与生成引用。Timeline 地址、board ID 和访问密码从该项目上下文解析，不再要求独立项目或连接注册表。
-- 通用服务器端 Agent 读取链路：从项目上下文提取一个或多个 HTTPS 路径边界，把密码替换为临时宿主引用，并向 DeepSeek 提供 `project_http_request`。当前允许 GET 和登录 auth POST，支持连续执行 meta → agent-doc → auth → items；响应 token 也只以宿主引用进入后续工具参数。
+- Agent 文本回复使用 `marked` 解析 GFM Markdown，再经 `DOMPurify` 白名单净化；已支持标题、列表、任务列表、引用、表格、行内代码、代码块和外链。模型原始 HTML 按文本展示，远程图片不加载；用户消息仍为纯文本。
+- Timeline Agent Support 参考适配器仍保留协议发现、密码换 token、分页读取和错误收敛测试；实际对话运行时不解析或注册 Timeline 类型，而是仅按项目上下文中的 HTTPS 范围临时挂载通用 MCP HTTP 工具。
+- 用户项目与上下文：用户可新建、重命名、归档和删除项目；删除会同时清理当前页面中的上下文、对话、成员与生成引用。数据源地址、操作说明和访问秘密都只存在于该项目上下文，不再要求独立项目、数据源类型或连接注册表。
+- 通用服务器端 Agent 读写链路：每个请求创建无持久化 Claude Code 会话和临时 MCP 配置；项目上下文中的一个或多个 HTTPS 路径成为 `project_http_request` 的 allowlist，密码和响应 token 只以宿主引用进入 Agent。工具允许 GET、登录 auth POST，以及经结构校验的 change-set 创建和带幂等键 commit；直接 PATCH／PUT／DELETE 和其他 POST 仍被拒绝。Runtime 没有 Bash、文件读写或任意 WebFetch 权限。
 - 无存储生产路径：响应内携带完整快照包供当前页面校验、隔离展示，并明确提示刷新后消失；存储原型不在当前 Worker 路由中暴露。
 - 当前页面仍是明确标注的本地演示壳；生产项目全真替换后必须移除硬编码项目、成员、消息和 fixture。
 
-当前自动证据：40 项 Node 测试、24 项浏览器测试（12 个场景 × Chromium / WebKit）、7 个 fixture 校验及 Worker 构建通过。真实 DeepSeek 已按项目上下文连续调用通用 HTTP 工具，依次完成 meta、agent-doc、auth 和 items，并正确回答卡片数量；评测确认密码与 token 未发送给模型。接入说明缺少绝对 HTTPS 地址时会在模型调用前明确报错，本地回复会显示实际 Agent 工具、数据源和密钥引用数量；若模型在尚未尝试工具前错误声称 HTTP 工具不可用，宿主会丢弃该答复、强制首次调用并继续 Agent 循环。明确生成快照时仍可使用现有 Timeline 兼容适配器产生合规快照。真实目标看板因本地页面中的实际密码仍需用户人工复测，尚未标记验收。详情见 `docs/testing/P2_ACCEPTANCE.md`。
+当前自动证据：41 项 Node 测试、7 个 fixture 校验、Worker 构建和 26 项 Chromium／WebKit 回归通过。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
 
 ## 已具备
 
@@ -32,18 +33,18 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 - Node 与浏览器共用的校验链路；Schema、可信 hash、scope、资源字节、引用、路径、版本和 runtime 支持范围检查。
 - 通过宿主校验后加载的隔离 viewer；通用 readBytes／readText／readJSON 绑定，展开、切视图、筛选、重载及错误恢复。
 - 样例生成脚本只允许同 ID 字节完全相同；新初始状态样例有新 ID，旧包不变。
-- 现有真实文本模型代理和项目／成员管理界面保留；源码迁至 src/web，构建统一输出前端与 Worker。
+- 现有项目／成员管理界面保留；本地 Node 入口接入 Claude Code Agent Runtime，Worker 构建仅保留静态与协议兼容，未配置 Node Runtime 时聊天明确失败而不回退到普通模型补全。
 - 项目规则、ADR、任务列表、依赖锁、统一检查与本地源码备份入口已建立。
 
 开工前 P1 基线验收：19 项 Node 测试，18 项浏览器测试（9 个场景 × Chromium / WebKit）；详情见 testing/P1_ACCEPTANCE.md。
 
 ## 生产首发仍未完成
 
-- 目标 Timeline 看板的真实鉴权和逐字段验收；适配器已实现，但尚未在用户项目上下文中完成目标地址、board ID 与密码的人工验收。
+- 目标 Timeline 看板的真实受控写入验收；真实读取已通过，但 change-set 创建、commit、幂等重试及写后回读尚未在目标看板执行。
 - 生产项目全真验收；用户项目／上下文路径已实现，但当前页面状态刷新后重置，尚未用目标上下文和真实 Timeline 响应完成端到端核对。真实成员和分级权限等待公司 OAuth。
 - 公司 OAuth 与真实成员／项目授权；当前托管身份检查不等于公司的生产身份体系。
 - 阿里云运行形态、密钥托管、域名、OAuth 回调、预发布环境和发布回退尚未确定或验收。
-- 真实模型的第二种快照表现、空／边界输入、修复路径和产品体验复核；当前已完成普通文本、Timeline 文本工具问答及一类 Timeline 概览快照的最小在线评测。
+- 真实 Agent Runtime 的第二种快照表现、空／边界输入和产品体验复核；当前已完成普通文本与一类 `submit_snapshot` 快照的真实运行时冒烟测试，不再保留 prompt 修复路径。
 - 独立的快照模式切换控件；当前 P2 入口是对话中明确要求快照／看板／报告。
 - 模型长期记忆、自动上下文、动态连接凭据及生产生成任务恢复。
 - active、查询复用、TTL、Redis、IndexedDB、Service Worker 或 Cache Storage 缓存。
@@ -56,7 +57,7 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 
 上述能力缺失不阻断首发，但产品界面不能声称结果已保存或可历史回放。发布后先补持久化，再依据真实延迟和 token 成本补缓存。
 
-依赖审计：生产依赖已知漏洞为 0；完整开发依赖有 4 个 moderate 告警，均来自只用于生成迁移的 `drizzle-kit` 间接引入的旧 `esbuild`。当前 npm 只提供不兼容降级方案，未执行强制修复；该工具不进入 Worker 运行时。
+依赖审计：Agent Runtime 已固定到 `@anthropic-ai/claude-code@2.1.270`；新增 `marked@18.0.13` 和 `dompurify@3.4.15` 分别用于 Markdown 解析与 DOM 净化。`npm audit --omit=dev --json` 报告 15 个生产依赖中 0 个已知漏洞，完整依赖树仍有 4 个 moderate 开发依赖问题。
 
 ## 使用边界
 

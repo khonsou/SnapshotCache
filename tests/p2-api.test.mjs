@@ -5,13 +5,13 @@ import { handleSnapshotRequest } from '../server/snapshots.mjs';
 import { createMemorySnapshotStore } from '../src/platform/store.mjs';
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><title>动态报告</title><style>body{font:16px sans-serif}</style></head><body><h1 id="title"></h1><script>'use strict';document.getElementById('title').textContent=Snapshot.readJSON('main').title;</script></body></html>`;
-const draft = JSON.stringify({
+const draft = {
   mode: 'snapshot', reply: '已根据用户提供的测试数据生成报告。', title: '动态测试报告',
   datasets: [{ id: 'main', mediaType: 'application/json', content: { title: '本周测试结果' } }],
   presentation: { html }, notes: ['用户提供数据'],
-});
+};
 const env = { DEEPSEEK_API_KEY: 'test-secret', DEEPSEEK_MODEL: 'deepseek-flash' };
-const body = { project: '测试项目', projectKey: 'alpha', context: '当前是 P2 测试。', messages: [{ role: 'user', content: '生成一个测试报告快照' }], responseMode: 'auto', idempotencyKey: 'idem-1' };
+const body = { project: '测试项目', projectKey: 'alpha', context: '当前是 P2 测试。', messages: [{ role: 'user', content: '生成一个测试报告快照' }], responseMode: 'snapshot', idempotencyKey: 'idem-1' };
 
 function chatRequest(value = body, user = 'user-a') {
   return new Request('https://example.test/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'oai-authenticated-user-id': user }, body: JSON.stringify(value) });
@@ -23,13 +23,13 @@ function get(path, user = 'user-a') {
 
 test('snapshot API commits once, replays idempotently and serves only the owning project', async () => {
   const store = createMemorySnapshotStore();
-  let modelCalls = 0;
+  let runtimeCalls = 0;
   const ids = ['run-one', 'snapshot-one', 'message-one', 'unused-run'];
   const options = {
     store,
     now: () => new Date('2026-09-11T13:00:00Z'),
     idFactory: () => ids.shift(),
-    fetcher: async () => { modelCalls++; return Response.json({ choices: [{ message: { content: draft }, finish_reason: 'stop' }] }); },
+    runtime: { execute: async () => { runtimeCalls++; return { mode: 'snapshot', reply: draft.reply, snapshotDraft: draft, runtime: 'claude-code', sessionId: 'snapshot-session', turns: 2, toolsUsed: ['submit_snapshot'] }; } },
   };
   const first = await handleChat(chatRequest(), env, options);
   assert.equal(first.status, 200);
@@ -41,7 +41,7 @@ test('snapshot API commits once, replays idempotently and serves only the owning
   const second = await handleChat(chatRequest(), env, options);
   assert.equal(second.status, 200);
   assert.deepEqual((await second.json()).snapshotRef, created.snapshotRef);
-  assert.equal(modelCalls, 1);
+  assert.equal(runtimeCalls, 1);
 
   const list = await handleSnapshotRequest(get('/api/projects/alpha/snapshots'), { SNAPSHOT_STORE: store });
   assert.equal(list.status, 200);
@@ -64,22 +64,22 @@ test('snapshot API commits once, replays idempotently and serves only the owning
 
 test('explicit snapshot failure is recorded and never downgraded to success text', async () => {
   const store = createMemorySnapshotStore();
-  let modelCalls = 0;
+  let runtimeCalls = 0;
   const ids = ['run-failed'];
   const response = await handleChat(chatRequest({ ...body, idempotencyKey: 'idem-failed', responseMode: 'snapshot' }), env, {
     store,
     now: () => new Date('2026-09-11T13:10:00Z'),
     idFactory: () => ids.shift(),
-    fetcher: async () => { modelCalls++; return Response.json({ choices: [{ message: { content: 'invalid' }, finish_reason: 'stop' }] }); },
+    runtime: { execute: async () => { runtimeCalls++; return { mode: 'snapshot', reply: 'invalid', snapshotDraft: { mode: 'snapshot' }, runtime: 'claude-code' }; } },
   });
   assert.equal(response.status, 422);
   const failure = await response.json();
-  assert.equal(failure.errorCode, 'draft_json_invalid');
-  assert.equal(modelCalls, 2);
+  assert.equal(failure.errorCode, 'draft_reply_invalid');
+  assert.equal(runtimeCalls, 1);
   assert.deepEqual(await store.listProjectSnapshots({ actorId: 'user-a', projectKey: 'alpha' }), []);
   const run = await store.getRun({ actorId: 'user-a', projectKey: 'alpha', idempotencyKey: 'idem-failed' });
   assert.equal(run.status, 'failed');
-  assert.equal(run.repairCount, 1);
+  assert.equal(run.repairCount, 0);
 });
 
 test('storage failure marks the run failed instead of leaving a staging success', async () => {
@@ -90,7 +90,7 @@ test('storage failure marks the run failed instead of leaving a staging success'
     store,
     now: () => new Date('2026-09-11T13:20:00Z'),
     idFactory: () => ids.shift(),
-    fetcher: async () => Response.json({ choices: [{ message: { content: draft }, finish_reason: 'stop' }] }),
+    runtime: { execute: async () => ({ mode: 'snapshot', reply: draft.reply, snapshotDraft: draft, runtime: 'claude-code', toolsUsed: ['submit_snapshot'] }) },
   });
   assert.equal(response.status, 503);
   assert.equal((await response.json()).errorCode, 'storage_failed');

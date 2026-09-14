@@ -112,7 +112,7 @@ export async function buildSnapshotCandidate({ draft, snapshotId, scope, created
     resources,
     extensions: { 'com.xuyan.generation': {
       simulated: !source,
-      sourceKind: source ? 'timeline' : 'user-provided',
+      sourceKind: source ? (source.kind || 'project-http') : 'user-provided',
       model,
       contractVersion,
       notes: draft.notes,

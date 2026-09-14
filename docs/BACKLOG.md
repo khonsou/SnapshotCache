@@ -1,6 +1,6 @@
 # 研发任务
 
-更新日期：2026-09-13
+更新日期：2026-09-14
 
 当前顺序已确认：**GUI → 快照协议 → 模型接入 → 自由对话生成快照 → Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云生产发布 → 持久化与缓存优化。**
 
@@ -9,26 +9,28 @@
 ## 已完成基线 · 1–4
 
 - GUI-01 · Done：项目群聊、项目切换、成员和上下文入口、快照挂载、移动端与键盘基础交互。后续只做真实数据替换和发布回归。
+- GUI-02 · Done：Agent 回复支持受净化 GFM Markdown，完成标题、列表、引用、表格、代码和链接的聊天密度优化；用户输入仍按纯文本显示，模型 HTML／脚本／远程图片不获得执行或加载权限。
 - SNAP-01 · Done：统一 SnapshotManifest / QueryContext / MessageSnapshotRef、任意 MIME 数据、真实字节 hash、通用校验器和隔离 viewer；7 个 dummy fixture 仅用于回归。
-- MODEL-01 · Done：DeepSeek 文本模型代理、服务端密钥、输入限制、错误处理与普通对话回归。
-- GEN-01 · Review：文本／快照意图分流、严格 SnapshotDraft、一次修复、服务端受信字段、动态展示和失败收敛已通过本地自动测试；普通文本和一类工具快照已通过真实模型最小调用，待第二种表现及空／边界／修复样本和产品复核后冻结。
+- MODEL-01 · Done：DeepSeek 通过固定版本 Claude Code Agent Runtime 接入，服务端密钥、输入限制、错误处理、普通对话、页面回归和目标数据源鉴权读取已验证。
+- GEN-01 · Review：文本／快照在同一 Agent Runtime 中处理；Agent 可调用 `submit_snapshot` MCP，宿主继续负责严格 SnapshotDraft、受信字段、hash 和隔离展示。已移除关键词分流和 prompt 修复，待第二种表现、空／边界样本和产品复核。
 - STORE-PROTOTYPE · Parked：D1/R2、Drizzle、run、目录及刷新回放已形成可选原型；不再作为首发前置，未来存储选型时复用其接口和测试经验。
 
 ## R0 · 冻结当前基线
 
-- R0-01 · In progress：代码与文档已审查更新；待建立 Git 提交检查点。
-- R0-02 · In progress：普通文本、通用 HTTP Agent 的 Timeline 文本问答和一类 Timeline 工具快照已通过真实 DeepSeek；待真实目标密码验收、第二种表现、空／边界、非法候选／修复和产品复核。
-- R0-03 · Done：40 项 Node、7 个 fixture、Worker 构建和 24 项 Chromium／WebKit 场景通过；已覆盖用户项目上下文、DeepSeek 网页搜索、无状态内联快照、刷新消失、项目删除、通用 HTTP 地址／方法边界、密钥引用、缺少绝对数据源地址的显式失败，以及模型错误否认已挂载工具时的强制纠错。
+- R0-01 · Done：Agent Runtime、受控项目 HTTP 读写和 Markdown 表现层的代码与文档已审查，已准备建立 Git 提交检查点。
+- R0-02 · In progress：普通文本、一类快照和目标 Timeline 读取已通过真实 DeepSeek + Claude Code Runtime；待第二种表现、空／边界和产品复核。
+- R0-03 · Done：41 项 Node、7 个 fixture、Worker 构建及 26 项 Chromium／WebKit 回归通过；覆盖 Runtime 隔离、临时 MCP、项目内固定二进制、文本／快照模式契约、Markdown 安全展示和现有项目管理交互。
 
 ## R1 · Timeline Agent Support 真实数据
 
-- TL-01 · In progress：实际 API 基址、公开 meta、protocol 19.2、能力和限额已探测；鉴权响应、真实分页、revision 和错误响应待目标密码验证。
-- TL-02 · Implemented：平台无关只读适配器与 `timeline_read_board` 工具白名单已实现；地址、board 和密码从当前用户项目上下文临时解析，token 只在当次宿主调用中存在。测试覆盖 401 单次重试、403 不重试、能力和过滤器拒绝。
-- TL-03 · Implemented：真实模型工具调用已同时接入普通文本和快照流程，不依赖末条消息关键词；工具结果记录 source、protocol、revision／观察时间并作为不可信数据处理。受控模拟 Timeline 响应的在线模型文本问答与快照评测均通过。
-- AGENT-HTTP-01 · Implemented：项目上下文可直接承载 Agent 接入指南；服务器按请求临时提供受路径约束的 `project_http_request`，真实 DeepSeek 已连续完成 meta → agent-doc → auth → items。当前只开放 GET 与登录 auth POST，写操作和确认策略待读取链路真实验收后扩展。
-- TL-04 · Blocked：需要用户在目标项目上下文中配置看板密码后，读取真实数据、验证 401/403/429/超时与字段缺失，并生成至少两类可逐字段核对的快照。
+- TL-01 · In progress：实际 API 基址、公开 meta、protocol 19.2、能力、限额、目标密码鉴权和真实卡片读取已验证；分页边界、revision 和 401／403／429 真实错误响应待验收。
+- TL-02 · Implemented：平台无关 HTTP 工具宿主和 Timeline 参考适配器已实现；运行路径只从当前用户项目上下文临时编译 HTTPS 范围与秘密引用，不解析或登记数据源类型，响应 token 只在当次 MCP 进程中存在。测试覆盖路径越权、任意 POST 拒绝、change-set 结构校验、commit 幂等键、密钥和 token 引用。
+- TL-03 · In progress：真实 Claude Code Runtime 已能加载请求级 MCP；普通文本、快照提交和目标 Timeline 读取已在线验证。受控 change-set 宿主权限已实现，待页面真实写入和回读验收。
+- AGENT-RUNTIME-01 · Review：已用 `@anthropic-ai/claude-code@2.1.270` 替换仓库内手写模型／工具循环；Claude Code 只作为框架，模型 endpoint、key 与计费均为 DeepSeek。会话无持久化、临时目录自动删除、隔离用户设置，禁止 Bash／文件／WebFetch／子 Agent 工具，只开放 DeepSeek WebSearch、`project_http_request` 和 `submit_snapshot`。Node、构建、浏览器、真实 WebSearch 和 Timeline 读取已通过；待真实 change-set 写入验收后 Done。
+- AGENT-HTTP-01 · Implemented：项目上下文直接承载 Agent 接入指南；每轮临时编译路径受限的 `project_http_request` MCP。当前开放 GET、登录 auth POST、结构合法的 change-set 创建和带 `Idempotency-Key` 的 commit；其他 POST 及直接 PATCH／PUT／DELETE 仍禁止。
+- TL-04 · In progress：真实看板读取已由人工验收通过；待在页面执行一次明确、可回读的 change-set，验证创建、commit、幂等键、变更后版本与目标字段。
 
-R1 验收：真实 Timeline 只读数据可以稳定生成协议合规快照；没有 dummy 补数、写操作、伪造来源或秘密泄露。
+R1 验收：真实 Timeline 数据可以稳定回答或生成协议合规快照；用户明确指令的写入只能通过合法 change-set 和幂等 commit 发生，没有 dummy 补数、伪造来源、直接写入或秘密泄露。
 
 ## R2 · 项目数据全真替换
 
