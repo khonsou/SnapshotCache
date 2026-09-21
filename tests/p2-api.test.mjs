@@ -31,35 +31,35 @@ test('snapshot API commits once, replays idempotently and serves only the owning
     idFactory: () => ids.shift(),
     runtime: { execute: async () => { runtimeCalls++; return { mode: 'snapshot', reply: draft.reply, snapshotDraft: draft, runtime: 'claude-code', sessionId: 'snapshot-session', turns: 2, toolsUsed: ['submit_snapshot'] }; } },
   };
-  const first = await handleChat(chatRequest(), env, options);
+  const first = await handleChat(chatRequest(), env, { ...options, identity: { id: 'user-a' } });
   assert.equal(first.status, 200);
   const created = await first.json();
   assert.equal(created.snapshotStatus, 'generated');
   assert.equal(created.snapshotRef.snapshotId, 'gen-snapshot-one');
   assert.deepEqual(created.scope, { tenantId: 'user-a', projectId: 'alpha' });
 
-  const second = await handleChat(chatRequest(), env, options);
+  const second = await handleChat(chatRequest(), env, { ...options, identity: { id: 'user-a' } });
   assert.equal(second.status, 200);
   assert.deepEqual((await second.json()).snapshotRef, created.snapshotRef);
   assert.equal(runtimeCalls, 1);
 
-  const list = await handleSnapshotRequest(get('/api/projects/alpha/snapshots'), { SNAPSHOT_STORE: store });
+  const list = await handleSnapshotRequest(get('/api/projects/alpha/snapshots'), { SNAPSHOT_STORE: store }, { identity: { id: 'user-a' } });
   assert.equal(list.status, 200);
   const entries = (await list.json()).entries;
   assert.equal(entries.length, 1);
   assert.deepEqual(entries[0].ref, created.snapshotRef);
 
-  const manifest = await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/manifest'), { SNAPSHOT_STORE: store });
+  const manifest = await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/manifest'), { SNAPSHOT_STORE: store }, { identity: { id: 'user-a' } });
   assert.equal(manifest.status, 200);
   const manifestJSON = JSON.parse(await manifest.text());
   assert.equal(manifestJSON.integrity.manifestHash, created.snapshotRef.manifestHash);
 
-  const resource = await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/resources/data.main'), { SNAPSHOT_STORE: store });
+  const resource = await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/resources/data.main'), { SNAPSHOT_STORE: store }, { identity: { id: 'user-a' } });
   assert.equal(resource.status, 200);
   assert.deepEqual(JSON.parse(await resource.text()), { title: '本周测试结果' });
 
-  assert.equal((await handleSnapshotRequest(get('/api/projects/beta/snapshots/gen-snapshot-one/manifest'), { SNAPSHOT_STORE: store })).status, 404);
-  assert.equal((await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/manifest', 'user-b'), { SNAPSHOT_STORE: store })).status, 404);
+  assert.equal((await handleSnapshotRequest(get('/api/projects/beta/snapshots/gen-snapshot-one/manifest'), { SNAPSHOT_STORE: store }, { identity: { id: 'user-a' } })).status, 404);
+  assert.equal((await handleSnapshotRequest(get('/api/projects/alpha/snapshots/gen-snapshot-one/manifest', 'user-b'), { SNAPSHOT_STORE: store }, { identity: { id: 'user-b' } })).status, 404);
 });
 
 test('explicit snapshot failure is recorded and never downgraded to success text', async () => {
@@ -67,7 +67,7 @@ test('explicit snapshot failure is recorded and never downgraded to success text
   let runtimeCalls = 0;
   const ids = ['run-failed'];
   const response = await handleChat(chatRequest({ ...body, idempotencyKey: 'idem-failed', responseMode: 'snapshot' }), env, {
-    store,
+    store, identity: { id: 'user-a' },
     now: () => new Date('2026-09-11T13:10:00Z'),
     idFactory: () => ids.shift(),
     runtime: { execute: async () => { runtimeCalls++; return { mode: 'snapshot', reply: 'invalid', snapshotDraft: { mode: 'snapshot' }, runtime: 'claude-code' }; } },
@@ -87,7 +87,7 @@ test('storage failure marks the run failed instead of leaving a staging success'
   const store = { ...baseStore, commitCandidate: async () => { throw new Error('disk unavailable'); } };
   const ids = ['run-storage', 'snapshot-storage', 'message-storage'];
   const response = await handleChat(chatRequest({ ...body, idempotencyKey: 'idem-storage', responseMode: 'snapshot' }), env, {
-    store,
+    store, identity: { id: 'user-a' },
     now: () => new Date('2026-09-11T13:20:00Z'),
     idFactory: () => ids.shift(),
     runtime: { execute: async () => ({ mode: 'snapshot', reply: draft.reply, snapshotDraft: draft, runtime: 'claude-code', toolsUsed: ['submit_snapshot'] }) },

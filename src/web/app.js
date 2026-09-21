@@ -108,6 +108,7 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
       body:JSON.stringify({project:projects[project].title,projectKey:project,context:directory.getContext(project),messages:turns,responseMode:'auto',idempotencyKey})});
     const result=await response.json().catch(()=>({error:'服务暂不可用，请通过服务端网址打开页面后重试。'}));
+    if(response.status===401){showAuthGate('登录已失效，请重新登录。');throw new Error('登录已失效，请重新登录。');}
     if(!response.ok||typeof result.reply!=='string')throw new Error(result.error||'回复失败，请重试。');
     if(!pending.has(token))return;
     if(result.snapshotPackage)registerInlineSnapshotPackage(result);
@@ -424,7 +425,31 @@ document.addEventListener('click', event => {
   viewer.replaceWith(viewer.cloneNode(false));
 });
 
-list.innerHTML=initialMessages(currentProject);
-renderNavigation();
-syncSidebar();
-syncMembersHeader();
+const authGate=document.querySelector('#auth-gate');
+const appShell=document.querySelector('.shell');
+const authMessage=document.querySelector('#auth-message');
+const authLogin=document.querySelector('#auth-login');
+function authErrorMessage(code){return ({oauth_denied:'登录已取消，请重新尝试。',oauth_transaction_missing:'登录请求已过期，请重新开始。',oauth_state_invalid:'登录校验失败，请重新开始。',oauth_exchange_failed:'DAO 登录暂时失败，请稍后重试。'})[code]||'';}
+function showAuthGate(message='登录后即可进入现有项目和 Agent 对话。',configured=true){
+  appShell.hidden=true;authGate.hidden=false;authMessage.textContent=message;authLogin.setAttribute('aria-disabled',String(!configured));
+  for(const node of document.querySelectorAll('dialog[open]'))node.close();
+}
+function startApp(user){
+  document.querySelector('#auth-user').textContent=user?.name||'公司用户';authGate.hidden=true;appShell.hidden=false;
+  list.innerHTML=initialMessages(currentProject);renderNavigation();syncSidebar();syncMembersHeader();
+}
+async function bootstrapAuth(){
+  const url=new URL(location.href);const error=authErrorMessage(url.searchParams.get('auth_error'));
+  if(url.searchParams.has('auth_error')){url.searchParams.delete('auth_error');history.replaceState(null,'',url.pathname+url.search+url.hash);}
+  try{
+    const response=await fetch('/api/session',{headers:{Accept:'application/json'},cache:'no-store'});
+    const result=await response.json().catch(()=>({}));
+    if(response.ok&&result.authenticated){startApp(result.user);return;}
+    showAuthGate(error||(result.configured===false?'DAO OAuth 尚未配置，请联系管理员。':'请使用公司账号登录后继续。'),result.configured!==false);
+  }catch{showAuthGate('暂时无法连接登录服务，请稍后刷新。',false);}
+}
+document.querySelector('#auth-logout').addEventListener('click',async()=>{
+  const button=document.querySelector('#auth-logout');button.disabled=true;
+  try{await fetch('/auth/logout',{method:'POST',headers:{Accept:'application/json'}});}finally{location.assign('/');}
+});
+bootstrapAuth();

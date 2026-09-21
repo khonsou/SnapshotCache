@@ -102,9 +102,10 @@ function acquireLimit(user) {
   return limit;
 }
 
-export async function handleChat(request, env, { local = false, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID() } = {}) {
+export async function handleChat(request, env, { auth = null, identity = null, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID() } = {}) {
   if (request.method !== 'POST') return json({ error: '请使用 POST 请求。' }, 405);
-  const user = local ? 'local' : request.headers.get('oai-authenticated-user-id');
+  const authenticated = identity || (auth ? await auth.identity(request) : null);
+  const user = authenticated?.id;
   if (!user) return json({ error: '请先登录后使用序言。' }, 401);
   const origin = request.headers.get('origin');
   if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') return json({ error: '不允许跨站调用。' }, 403);

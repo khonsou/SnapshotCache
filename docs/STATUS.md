@@ -1,4 +1,4 @@
-# 实现状态 · 2026-09-14
+# 实现状态 · 2026-09-21
 
 GUI、快照协议、文本模型和自由对话生成快照已经形成可工作的本地基线。下一主线改为 Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云预发布／生产；缓存和跨会话持久化移到发布后，不再阻断首发。当前尚未发布。
 
@@ -23,8 +23,9 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 - 通用服务器端 Agent 读写链路：每个请求创建无持久化 Claude Code 会话和临时 MCP 配置；项目上下文中的一个或多个 HTTPS 路径成为 `project_http_request` 的 allowlist，密码和响应 token 只以宿主引用进入 Agent。工具允许 GET、登录 auth POST，以及经结构校验的 change-set 创建和带幂等键 commit；直接 PATCH／PUT／DELETE 和其他 POST 仍被拒绝。Runtime 没有 Bash、文件读写或任意 WebFetch 权限。
 - 无存储生产路径：响应内携带完整快照包供当前页面校验、隔离展示，并明确提示刷新后消失；存储原型不在当前 Worker 路由中暴露。
 - 当前页面仍是明确标注的本地演示壳；生产项目全真替换后必须移除硬编码项目、成员、消息和 fixture。
+- 最小 DAO OAuth 登录门禁已实现：服务端 BFF 按当前待验证契约完成 Authorization Code + PKCE，不发送 `client_id`，并直接从 Token Endpoint 返回的 DAO JWT `user_id/user_name` 建立 session；profile URL 仅作为可选覆盖。浏览器只持有 HttpOnly session cookie，聊天和快照身份不再信任请求自报 header。本地内存 session、登录墙、退出、过期和测试绕过已有自动化覆盖；生产模式禁止测试绕过和 HTTP OAuth。本仓库不包含 OAuth mock；真实 DAO 只允许生产回调，必须在该环境验收，tag 项目授权尚未开始。
 
-当前自动证据：41 项 Node 测试、7 个 fixture 校验、Worker 构建和 26 项 Chromium／WebKit 回归通过。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
+当前自动证据：49 项 Node 测试、7 个 fixture 校验、Worker 构建和 28 项 Chromium／WebKit 回归通过。OAuth 覆盖 PKCE、state、一次性 transaction、DAO JWT 身份、可选 profile 查询、内存 session、服务端过期、退出、生产 cookie、开放重定向、跨站退出和伪造身份 header；浏览器覆盖未登录登录墙与登录后原有功能。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
 
 ## 已具备
 
@@ -42,7 +43,7 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 
 - 目标 Timeline 看板的真实受控写入验收；真实读取已通过，但 change-set 创建、commit、幂等重试及写后回读尚未在目标看板执行。
 - 生产项目全真验收；用户项目／上下文路径已实现，但当前页面状态刷新后重置，尚未用目标上下文和真实 Timeline 响应完成端到端核对。真实成员和分级权限等待公司 OAuth。
-- 公司 OAuth 与真实成员／项目授权；当前托管身份检查不等于公司的生产身份体系。
+- 真实 DAO OAuth 人工联调与 tag 项目授权；最小 BFF 登录门禁已经实现，但实际授权、token 与 HTTPS 回调尚未在生产回调域名验证，tag 与成员能力未接入。
 - 阿里云运行形态、密钥托管、域名、OAuth 回调、预发布环境和发布回退尚未确定或验收。
 - 真实 Agent Runtime 的第二种快照表现、空／边界输入和产品体验复核；当前已完成普通文本与一类 `submit_snapshot` 快照的真实运行时冒烟测试，不再保留 prompt 修复路径。
 - 独立的快照模式切换控件；当前 P2 入口是对话中明确要求快照／看板／报告。

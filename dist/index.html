@@ -21,7 +21,16 @@
     <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="i-edit" viewBox="0 0 24 24"><path d="m14 5 5 5M4 20l5-1L21 7l-4-4L5 15l-1 5Z"/></symbol>
   </defs></svg>
-  <div class="shell sidebar-hidden">
+  <section class="auth-gate" id="auth-gate" aria-labelledby="auth-title">
+    <div class="auth-card">
+      <span class="auth-symbol" aria-hidden="true">◧</span>
+      <p class="auth-eyebrow">序言</p>
+      <h1 id="auth-title">使用公司账号继续</h1>
+      <p id="auth-message">登录后即可进入现有项目和 Agent 对话。</p>
+      <a class="auth-login" id="auth-login" href="/auth/login?return_to=%2F">DAO OAuth 登录</a>
+    </div>
+  </section>
+  <div class="shell sidebar-hidden" hidden>
     <aside class="sidebar" id="sidebar" aria-label="项目导航" aria-hidden="true" inert>
       <div class="sidebar-heading"><a class="brand" href="./index.html"><span class="brand-symbol" aria-hidden="true">◧</span>序言</a><button class="icon-button" id="sidebar-close" aria-label="隐藏侧边栏" title="隐藏侧边栏"><svg><use href="#i-menu"/></svg></button></div>
       <div class="nav-label"><span>项目</span><button class="text-button" id="manage-projects">管理</button></div>
@@ -33,6 +42,8 @@
         <button class="icon-button" id="menu-toggle" aria-label="显示侧边栏" aria-expanded="false" aria-controls="sidebar" title="显示侧边栏"><svg><use href="#i-menu"/></svg></button>
         <h1 id="project-title">秋季新品发布</h1>
         <button class="members" id="members-button" aria-label="管理项目成员" aria-haspopup="dialog" aria-controls="member-dialog">3 位成员</button>
+        <span class="auth-user" id="auth-user"></span>
+        <button class="text-button auth-logout" id="auth-logout" type="button">退出</button>
         <button class="icon-button" id="new-chat" aria-label="开启新对话" title="开启新对话"><svg><use href="#i-edit"/></svg></button>
       </header>
       <section class="conversation" id="conversation" aria-label="群聊消息"><div class="message-list" id="message-list"></div></section>

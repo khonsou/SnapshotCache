@@ -1,8 +1,10 @@
 # P2 验收证据（开发中）
 
-日期：2026-09-14
+日期：2026-09-21
 
 状态：Claude Code Agent Runtime 重构已通过 Node 测试、构建、浏览器回归和真实 DeepSeek 冒烟；目标 Timeline 真实读取已由人工验收，受控 change-set 写入待验收。2026-09-12 产品路线调整后，真实 Sites D1/R2 不再是首发阻断项；本记录不等于公司 OAuth 或阿里云生产验收。
+
+2026-09-21 已实现最小 DAO OAuth 登录门禁，但真实 DAO 仅允许生产回调；以下自动化证据不等于真实 DAO 登录验收，也不包含 tag 项目授权。
 
 路线说明：D1/R2 相关检查继续记录原型能力，但生产首发以 `docs/PRODUCTION_RELEASE_PLAN_2026-09-12.md` 为准。首发允许无状态，必须明确刷新和历史回放限制。
 
@@ -47,6 +49,9 @@
 - 加入 Markdown 表现层依赖后，`npm audit --omit=dev --json` 报告 15 个生产依赖中 0 个已知漏洞；完整依赖树仍有 4 个 moderate 开发依赖问题。
 
 ## 已覆盖
+
+- 2026-09-21 OAuth Phase 0 执行 `npm run check`：49/49 Node、Worker 构建和 7 个 fixture 通过；新增 BFF Authorization Code + PKCE、state、一次性 transaction、默认不发送 `client_id`、JWT `user_id/user_name` 身份、可选 profile 查询、内存 session、过期、退出、生产 cookie、开放重定向、跨站退出、无效端点失败关闭、身份 header 伪造，以及生产模式拒绝 HTTP OAuth 和测试绕过。真实 DAO 登录仍需在已登记的 HTTPS 回调域名验收。
+- 2026-09-21 执行 `npm run test:e2e`：28/28 通过，Chromium 与 WebKit 各 14 个场景；新增未登录时只显示 DAO 登录墙、项目工作区不渲染的浏览器验证，登录后的原有 GUI、对话、快照和项目管理回归保持通过。浏览器回归使用显式 `XUYAN_AUTH_BYPASS=true`，不代表真实 OAuth 服务联调。
 
 - 2026-09-14 受控写权限变更后重跑 `npm run check`：41/41 Node 通过，Worker 构建和 7 个 fixture 校验通过。
 - 2026-09-14 重跑 `npm run test:e2e`：24/24 通过，Chromium 与 WebKit 各 12 个场景。

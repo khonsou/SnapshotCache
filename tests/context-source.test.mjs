@@ -68,7 +68,7 @@ test('Context without an absolute source still enters the Agent Runtime without 
     assert.equal(task.projectConfig, null);
     return { mode: 'text', reply: '缺少可访问的绝对地址。', runtime: 'claude-code', sessionId: 'no-http', turns: 1, toolsUsed: [] };
   } };
-  const response = await handleChat(request('统计卡片数量', incomplete), baseEnv, { runtime });
+  const response = await handleChat(request('统计卡片数量', incomplete), baseEnv, { runtime, identity: { id: 'user-real' } });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).reply, '缺少可访问的绝对地址。');
 });
@@ -99,7 +99,7 @@ test('API starts the Agent Runtime with redacted Context and request-scoped secr
     assert.deepEqual(task.projectConfig.http.allowedPrefixes, [{ origin: 'https://timeline.example.test', pathname: '/prefix' }]);
     return { mode: 'text', reply: '当前看板共有 1 张卡片。', runtime: 'claude-code', sessionId: 'timeline-session', turns: 3, toolsUsed: ['project_http_request'] };
   } };
-  const response = await handleChat(request('统计项目看板有多少张卡片。'), baseEnv, { runtime, idFactory: () => 'run' });
+  const response = await handleChat(request('统计项目看板有多少张卡片。'), baseEnv, { runtime, identity: { id: 'user-real' }, idFactory: () => 'run' });
   const result = await response.json();
   assert.equal(response.status, 200, JSON.stringify(result));
   assert.equal(result.reply, '当前看板共有 1 张卡片。');
@@ -114,7 +114,7 @@ test('runtime-submitted snapshot produces a sourced package without a semantic r
     source: { sourceId: 'timeline', revision: '8', observedAt: '2026-09-12T12:00:00Z', kind: 'timeline', boardId: 'board-real', protocolVersion: '19.2' },
   }) };
   const ids = ['run', 'snapshot', 'message'];
-  const response = await handleChat(request('读取 Timeline 并生成项目快照。'), baseEnv, { runtime, idFactory: () => ids.shift(), now: () => new Date('2026-09-12T12:00:00Z') });
+  const response = await handleChat(request('读取 Timeline 并生成项目快照。'), baseEnv, { runtime, identity: { id: 'user-real' }, idFactory: () => ids.shift(), now: () => new Date('2026-09-12T12:00:00Z') });
   const result = await response.json();
   assert.equal(response.status, 200, JSON.stringify(result));
   assert.equal(result.sourceKind, 'timeline');
@@ -128,7 +128,7 @@ test('unrelated chat uses the same Agent Runtime without project-topic restricti
     assert.equal(task.messages.at(-1).content, '讲一个关于猫的冷笑话。');
     return { mode: 'text', reply: '猫最怕鼠标。', runtime: 'claude-code', sessionId: 'chat-session', turns: 1, toolsUsed: [] };
   } };
-  const response = await handleChat(request('讲一个关于猫的冷笑话。'), baseEnv, { runtime, idFactory: () => 'fixed' });
+  const response = await handleChat(request('讲一个关于猫的冷笑话。'), baseEnv, { runtime, identity: { id: 'user-real' }, idFactory: () => 'fixed' });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).reply, '猫最怕鼠标。');
 });

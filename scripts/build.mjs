@@ -17,11 +17,17 @@ for (const entry of catalog.entries) {
   for (const [name, bytes] of new Map([['manifest.json', pkg.manifest], ...pkg.files])) assets['/snapshots/' + entry.ref.snapshotId + '/' + name] = { body: Buffer.from(bytes).toString('base64'), type: 'application/octet-stream', snapshot: true };
 }
 const result = await build({ stdin: { contents: `import { handleChat, json } from './server/api.mjs';
+import { createDaoOAuthApp } from './server/auth.mjs';
 import { assetHeaders } from './server/headers.mjs';
+import { handleSnapshotRequest } from './server/snapshots.mjs';
 const assets = ${JSON.stringify(assets)};
+let authApp;
 export default { async fetch(request, env) {
   const path = new URL(request.url).pathname;
-  if (path === '/api/chat') return handleChat(request, env);
+  const auth = authApp ||= createDaoOAuthApp({ env });
+  if (['/auth/login', '/oauth/callback', '/api/session', '/auth/logout'].includes(path)) return auth.handle(request);
+  if (path === '/api/chat') return handleChat(request, env, { auth });
+  if (path.startsWith('/api/projects/') && path.includes('/snapshots')) return handleSnapshotRequest(request, env, { auth });
   if (path === '/api/health') return json({ configured: Boolean(env.DEEPSEEK_API_KEY) });
   if (!['GET', 'HEAD'].includes(request.method)) return json({error:'Method not allowed'},405);
   const asset = Object.hasOwn(assets, path) ? assets[path] : null;

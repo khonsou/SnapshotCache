@@ -5,17 +5,14 @@ import { json } from './api.mjs';
 
 const idPattern = '[A-Za-z0-9][A-Za-z0-9_.-]{0,127}';
 
-function actorFor(request, env) {
-  return env.SNAPSHOT_LOCAL ? 'local' : request.headers.get('oai-authenticated-user-id');
-}
-
 function snapshotResponse(bytes, method) {
   return new Response(method === 'HEAD' ? null : bytes, { headers: assetHeaders({ type: 'application/octet-stream', snapshot: true }) });
 }
 
-export async function handleSnapshotRequest(request, env) {
+export async function handleSnapshotRequest(request, env, { auth = null, identity = null } = {}) {
   if (!['GET', 'HEAD'].includes(request.method)) return json({ error: 'Method not allowed' }, 405);
-  const actorId = actorFor(request, env);
+  const authenticated = identity || (auth ? await auth.identity(request) : null);
+  const actorId = authenticated?.id;
   if (!actorId) return json({ error: '请先登录后访问快照。' }, 401);
   const path = new URL(request.url).pathname;
   const listMatch = path.match(new RegExp(`^/api/projects/(${idPattern})/snapshots$`));

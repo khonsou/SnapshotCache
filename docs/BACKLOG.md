@@ -1,6 +1,6 @@
 # 研发任务
 
-更新日期：2026-09-14
+更新日期：2026-09-21
 
 当前顺序已确认：**GUI → 快照协议 → 模型接入 → 自由对话生成快照 → Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云生产发布 → 持久化与缓存优化。**
 
@@ -43,8 +43,9 @@ R2 验收：生产目标项目不含模拟业务事实，所有业务数据和�
 
 ## R3 · 公司 OAuth 与真实授权
 
-- AUTH-01 · Proposed：确认公司 OAuth/OIDC issuer、client ID、audience、redirect URI、scope、claims 和环境配置方式。
-- AUTH-02 · Proposed：完成登录、回调、session／token 校验、退出和过期处理；覆盖 state、nonce、PKCE 或适用的等价保护。
+- AUTH-00 · Implemented：最高优先级的最小 DAO OAuth 门禁已实现；BFF 按当前待验证契约不发送 `client_id`，Authorization Code + PKCE、state、同源 return path、JWT 身份、进程内 session、HttpOnly cookie、退出和 API 身份注入已有自动化覆盖。登录后保持现有项目与 Agent 行为且不读取 tag；真实 DAO 登录待生产回调环境验收。本仓库不包含 OAuth mock 服务。
+- AUTH-01 · In progress：核对开发、预发布和生产 redirect URI、scope、logout/revoke 及各环境配置；Phase 0 不要求额外 profile URL，DAO 后续若分配独立 client 可通过环境变量覆盖。
+- AUTH-02 · Review：登录、回调、内存 session、退出和过期处理已实现；覆盖 state、PKCE、一次性 transaction、cookie 和身份 header 伪造。真实 DAO 响应与生产 HTTPS cookie 待联调。
 - AUTH-03 · Proposed：建立 OAuth 用户到项目成员和 Timeline 可见范围的服务端映射；移除生产环境可伪造身份入口。
 - AUTH-04 · Proposed：覆盖未登录、过期、跨用户、跨项目、成员移出、权限撤销和敏感信息泄露反例。
 

@@ -7,6 +7,14 @@ async function loaded(page) {
   await expect(frame.getByRole('heading', { name: '秋季新品发布' })).toBeVisible();
   return frame;
 }
+test('DAO session is required before the project workspace is rendered', async ({ page }) => {
+  await page.route('**/api/session', route => route.fulfill({ status: 401, json: { authenticated: false, configured: true } }));
+  await page.goto('/');
+  await expect(page.locator('#auth-gate')).toBeVisible();
+  await expect(page.locator('#auth-title')).toHaveText('使用公司账号继续');
+  await expect(page.locator('#auth-login')).toHaveAttribute('href', '/auth/login?return_to=%2F');
+  await expect(page.locator('.shell')).toBeHidden();
+});
 test('loads a verified package, filters, changes tabs and reloads initial state', async ({ page }) => {
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   const frame = await loaded(page);
