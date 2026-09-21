@@ -116,6 +116,21 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .typing i { width: 4px; height: 4px; border-radius: 50%; background: #93a0b6; animation: pulse 1s infinite; }
 .typing i:nth-child(2) { animation-delay: .15s; }
 .typing i:nth-child(3) { animation-delay: .3s; }
+.agent-progress { display: inline-block; white-space: nowrap; color: #536174; }
+.agent-progress.is-scrolling { animation: agent-trace-scroll var(--scroll-duration, 8s) 1s ease-in-out infinite alternate; }
+.agent-elapsed { display: block; margin-top: 5px; color: #8e97a5; font-size: 12px; }
+.agent-trace { margin-top: 2px; padding: 9px 12px; border: 1px solid #e6e9ef; border-radius: 8px; background: #f8f9fb; color: #657082; font-size: 12px; line-height: 1.65; }
+.agent-trace summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #536174; font-weight: 550; list-style: none; }
+.agent-trace summary::-webkit-details-marker { display: none; }
+.agent-trace summary::before { content: '▸'; flex: none; }
+.agent-trace[open] summary::before { content: '▾'; }
+.agent-trace-count { flex: none; white-space: nowrap; }
+.agent-trace-viewport { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; mask-image: linear-gradient(to right, #000 92%, transparent); }
+.agent-trace ol { max-height: 180px; overflow-y: auto; margin: 8px 0 0; padding: 0; list-style: none; }
+.agent-trace li + li { margin-top: 5px; }
+.agent-trace li.failed { color: #a64747; }
+@keyframes agent-trace-scroll { to { transform: translateX(var(--scroll-distance)); } }
+@media (prefers-reduced-motion: reduce) { .agent-progress.is-scrolling { animation: none; } }
 .empty-conversation { padding: 100px 0; text-align: center; }
 .empty-conversation h2 { font-size: 20px; font-weight: 500; }
 .empty-conversation p { color: var(--muted); font-size: 14px; }

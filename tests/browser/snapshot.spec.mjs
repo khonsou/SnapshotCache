@@ -129,6 +129,75 @@ test('existing text chat still replies and snapshot reload does not call the mod
   await expect(page.frameLocator('snapshot-viewer iframe').locator('#count')).toHaveText('显示 4 / 4 项');
 });
 
+test('chat shows live tool progress and elapsed time before the final reply', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      if (new URL(input, location.href).pathname !== '/api/chat') return originalFetch(input, options);
+      const encoder = new TextEncoder();
+      const frame = (type, value) => encoder.encode(`event: ${type}\ndata: ${JSON.stringify(value)}\n\n`);
+      return Promise.resolve(new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(frame('progress', { phase: 'accepted' }));
+          setTimeout(() => controller.enqueue(frame('progress', { phase: 'tool_started', tool: 'project_http_request', step: 1, source: 1, action: 'read', token: 'never-show-secret' })), 100);
+          setTimeout(() => controller.enqueue(frame('progress', { phase: 'tool_finished', tool: 'project_http_request', step: 1, outcome: 'succeeded', status: 200, durationMs: 840, result: 'never-show-secret' })), 800);
+          setTimeout(() => controller.enqueue(frame('progress', { phase: 'tool_started', tool: 'project_http_request', step: 2, source: 2, action: 'auth', url: 'https://never-show-secret.test' })), 1100);
+          setTimeout(() => controller.enqueue(frame('progress', { phase: 'tool_finished', tool: 'project_http_request', step: 2, outcome: 'failed', status: 403, durationMs: 390 })), 1500);
+          setTimeout(() => {
+            controller.enqueue(frame('result', { status: 200, body: { reply: '项目数据已核对。', truncated: false } }));
+            controller.close();
+          }, 3200);
+        },
+      }), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } }));
+    };
+  });
+  await loaded(page);
+  await page.locator('#message-input').fill('检查项目数据');
+  await page.locator('#composer').evaluate(form => form.requestSubmit());
+  await expect(page.locator('[data-agent-trace]')).not.toHaveAttribute('open', '');
+  await expect(page.locator('[data-agent-progress]')).toHaveText('1. 数据源 1 · 读取 · 执行中');
+  await page.locator('[data-agent-trace] summary').evaluate(summary => { summary.style.width = '210px'; window.dispatchEvent(new Event('resize')); });
+  await expect(page.locator('[data-agent-progress]')).toHaveClass(/is-scrolling/u);
+  expect(await page.locator('[data-agent-progress]').evaluate(label => getComputedStyle(label).animationName)).toBe('agent-trace-scroll');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await page.locator('[data-agent-progress]').evaluate(label => getComputedStyle(label).animationName)).toBe('none');
+  await expect(page.locator('[data-agent-trace-list] li')).toHaveCount(2);
+  await expect(page.locator('[data-agent-trace-list]')).toBeHidden();
+  await expect(page.locator('[data-agent-progress]')).toContainText('数据源 2 · 鉴权 · 失败 · HTTP 403');
+  await expect(page.locator('[data-agent-elapsed]')).toContainText('已等待 1 秒');
+  await expect(page.getByText('项目数据已核对。')).toBeVisible();
+  await expect(page.locator('[data-agent-trace]')).not.toHaveAttribute('open', '');
+  await page.getByText('本轮执行记录 · 2 步').click();
+  await expect(page.locator('[data-agent-trace-list] li').first()).toHaveText('1. 数据源 1 · 读取 · 成功 · HTTP 200 · 0.8 秒');
+  await expect(page.locator('[data-agent-trace-list] li').last()).toHaveText('2. 数据源 2 · 鉴权 · 失败 · HTTP 403 · 0.4 秒');
+  await expect(page.getByText('never-show-secret')).toHaveCount(0);
+});
+
+test('interrupted tool trace remains truthful and private after an error', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      if (new URL(input, location.href).pathname !== '/api/chat') return originalFetch(input, options);
+      const encoder = new TextEncoder();
+      const frame = (type, value) => encoder.encode(`event: ${type}\ndata: ${JSON.stringify(value)}\n\n`);
+      return Promise.resolve(new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(frame('progress', { phase: 'tool_started', tool: 'project_http_request', step: 1, source: 1, action: 'read', password: 'never-show-secret' }));
+          controller.enqueue(frame('result', { status: 504, body: { error: '回复超时，请稍后重试。' } }));
+          controller.close();
+        },
+      }), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } }));
+    };
+  });
+  await loaded(page);
+  await page.locator('#message-input').fill('查询数据');
+  await page.locator('#composer').evaluate(form => form.requestSubmit());
+  await expect(page.getByText('回复超时，请稍后重试。')).toBeVisible();
+  await page.getByText('本轮执行记录 · 1 步').click();
+  await expect(page.locator('[data-agent-trace-list] li')).toHaveText('1. 数据源 1 · 读取 · 未确认返回');
+  await expect(page.getByText('never-show-secret')).toHaveCount(0);
+});
+
 test('agent markdown is structured, readable and sanitized without changing user messages', async ({ page }) => {
   const reply = `# 执行结果
 

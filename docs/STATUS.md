@@ -1,4 +1,4 @@
-# 实现状态 · 2026-09-21
+# 实现状态 · 2026-09-22
 
 GUI、快照协议、文本模型和自由对话生成快照已经形成可工作的本地基线。下一主线改为 Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云预发布／生产；缓存和跨会话持久化移到发布后，不再阻断首发。当前尚未发布。
 
@@ -18,6 +18,7 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 - 已保留快照 run、幂等提交和持久化路由原型，首发生产路由当前不启用这些能力。
 - 聊天中可校验并展示响应携带的完整快照包；当前页面刷新后消失，不声称已保存或可历史回放。
 - Agent 文本回复使用 `marked` 解析 GFM Markdown，再经 `DOMPurify` 白名单净化；已支持标题、列表、任务列表、引用、表格、行内代码、代码块和外链。模型原始 HTML 按文本展示，远程图片不加载；用户消息仍为纯文本。
+- 聊天进度使用同一 POST 的可选事件流：Claude Code 原有 `stream-json` 的初始化／工具事件被压缩为固定、安全的状态，页面实时显示每次受控调用的数据源编号、操作类别、可确认的 HTTP 状态、耗时与等待时间。执行记录默认收起，摘要持续显示当前步骤；窄宽度横向滚动并尊重减少动态效果设置，展开列表内部限高。没有新事件时只显示本阶段等待，不虚构模型内部步骤。不将模型思考、工具参数、URL、响应正文或密钥放入进度事件；旧 JSON 客户端仍可使用。阿里云代理是否会缓冲该流待预发布验证。
 - Timeline Agent Support 参考适配器仍保留协议发现、密码换 token、分页读取和错误收敛测试；实际对话运行时不解析或注册 Timeline 类型，而是仅按项目上下文中的 HTTPS 范围临时挂载通用 MCP HTTP 工具。
 - 用户项目与上下文：用户可新建、重命名、归档和删除项目；删除会同时清理当前页面中的上下文、对话、成员与生成引用。数据源地址、操作说明和访问秘密都只存在于该项目上下文，不再要求独立项目、数据源类型或连接注册表。
 - 通用服务器端 Agent 读写链路：每个请求创建无持久化 Claude Code 会话和临时 MCP 配置；项目上下文中的一个或多个 HTTPS 路径成为 `project_http_request` 的 allowlist，密码和响应 token 只以宿主引用进入 Agent。工具允许 GET、登录 auth POST，以及经结构校验的 change-set 创建和带幂等键 commit；直接 PATCH／PUT／DELETE 和其他 POST 仍被拒绝。Runtime 没有 Bash、文件读写或任意 WebFetch 权限。
@@ -25,7 +26,7 @@ GUI、快照协议、文本模型和自由对话生成快照已经形成可工�
 - 当前页面仍是明确标注的本地演示壳；生产项目全真替换后必须移除硬编码项目、成员、消息和 fixture。
 - 最小 DAO OAuth 登录门禁已实现：服务端 BFF 按当前待验证契约完成 Authorization Code + PKCE，不发送 `client_id`，并直接从 Token Endpoint 返回的 DAO JWT `user_id/user_name` 建立 session；profile URL 仅作为可选覆盖。浏览器只持有 HttpOnly session cookie，聊天和快照身份不再信任请求自报 header。本地内存 session、登录墙、退出、过期和测试绕过已有自动化覆盖；生产模式禁止测试绕过和 HTTP OAuth。本仓库不包含 OAuth mock；真实 DAO 只允许生产回调，必须在该环境验收，tag 项目授权尚未开始。
 
-当前自动证据：49 项 Node 测试、7 个 fixture 校验、Worker 构建和 28 项 Chromium／WebKit 回归通过。OAuth 覆盖 PKCE、state、一次性 transaction、DAO JWT 身份、可选 profile 查询、内存 session、服务端过期、退出、生产 cookie、开放重定向、跨站退出和伪造身份 header；浏览器覆盖未登录登录墙与登录后原有功能。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
+当前自动证据：52 项 Node 测试、7 个 fixture 校验、Worker 构建和 32 项 Chromium／WebKit 回归通过。OAuth 覆盖 PKCE、state、一次性 transaction、DAO JWT 身份、可选 profile 查询、内存 session、服务端过期、退出、生产 cookie、开放重定向、跨站退出和伪造身份 header；浏览器覆盖未登录登录墙、登录后原有功能及执行中进度展示。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
 
 ## 已具备
 

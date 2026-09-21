@@ -10,6 +10,8 @@
 
 只看 P1 样例无需模型密钥。需要真实对话或动态生成快照时，复制 `.env.example` 为 `.env` 并配置 `DEEPSEEK_API_KEY`。密钥只在服务端使用，不能复制到 dist 或提交。页面中新消息通过同源 `/api/chat` 启动一次无持久化 Agent 会话；Claude Code 的所有 Anthropic 环境变量都指向 DeepSeek Anthropic endpoint，旧的 `deepseek-flash` 配置会在运行时规范为 `deepseek-v4-flash`。Agent 可自行使用 DeepSeek 原生 WebSearch。明确要求可视化交付时，Agent 调用 `submit_snapshot`，宿主再执行快照协议与安全校验。宿主不使用关键词或拒绝话术规则替 Agent 做语义决策。
 
+聊天页面会通过同一个 POST 请求接收 Agent 进度事件，逐次显示数据源编号、受控操作类别、实际 HTTP 状态、耗时与等待时间；执行记录默认收起，摘要持续显示当前步骤，空间不足时横向滚动（尊重系统减少动态效果设置），可按需展开完整记录。未声明流式接收的客户端仍得到 JSON。进度事件只包含固定枚举和宿主确认的数值，不包含模型思考、工具参数、URL、第三方响应或密钥；没有新的可观察动作时只更新等待时间。部署时反向代理必须关闭 `/api/chat` 的响应缓冲，否则页面仍会在结束时一次性收到全部事件。
+
 Phase 0 已加入 DAO OAuth 登录门禁。按照目前确认的 DAO 服务契约，BFF 不发送 `client_id`，并从 DAO 返回的 JWT `user_id/user_name` 建立 session；该契约仍需在真实 DAO 回调环境验收。生产环境必须设置 `NODE_ENV=production`、浏览器实际访问的 HTTPS `APP_PUBLIC_ORIGIN` 和 DAO 已登记的精确 `DAO_OAUTH_REDIRECT_URI`。OAuth code、access token 和可选 refresh token 只由服务端处理，浏览器仅持有 HttpOnly session cookie。测试身份绕过和 HTTP OAuth 地址在生产模式下均不可用。第一阶段 session 存在单个 Node 进程内，服务重启后需要重新登录。
 
 项目由用户在页面中创建和删除，不使用部署级项目或数据源连接注册表。项目“上下文”同时承载背景、数据源地址、凭据和 Agent 接入说明；宿主按每次请求临时把其中列出的 HTTPS 地址编译成请求级 MCP 工具，Claude Code Runtime 可以连续完成协议探测、在线文档读取、鉴权、查询、分析和受控 change-set 写入。当前允许 GET、登录 `POST .../auth`、创建 `POST .../change-sets` 及带 `Idempotency-Key` 的 `POST .../change-sets/:id/commit`；仍禁止直接 PATCH／PUT／DELETE 和其他 POST。密码和响应 token 都转换为临时宿主引用，原值不会发送给模型或写入快照。Runtime 不获得 Bash、项目文件或任意 WebFetch 权限。没有 D1/R2 时，项目、对话、上下文和生成结果只保留在当前页面，刷新后消失。

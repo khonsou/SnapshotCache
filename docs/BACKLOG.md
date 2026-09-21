@@ -1,6 +1,6 @@
 # 研发任务
 
-更新日期：2026-09-21
+更新日期：2026-09-22
 
 当前顺序已确认：**GUI → 快照协议 → 模型接入 → 自由对话生成快照 → Timeline Agent Support 真实取数 → 项目数据全真 → 公司 OAuth → 阿里云生产发布 → 持久化与缓存优化。**
 
@@ -10,6 +10,7 @@
 
 - GUI-01 · Done：项目群聊、项目切换、成员和上下文入口、快照挂载、移动端与键盘基础交互。后续只做真实数据替换和发布回归。
 - GUI-02 · Done：Agent 回复支持受净化 GFM Markdown，完成标题、列表、引用、表格、代码和链接的聊天密度优化；用户输入仍按纯文本显示，模型 HTML／脚本／远程图片不获得执行或加载权限。
+- GUI-03 · Implemented：Agent 执行记录默认收起，摘要中持续显示当前步骤；窄宽度横向滚动，减少动态效果时静止，展开列表内部限高滚动。逐次保留数据源编号、受控操作、HTTP 状态、耗时与等待时间；只展示宿主确认的事实，不展示思考、URL、参数或响应正文。旧 JSON 客户端兼容；真实 DeepSeek 页面手测和阿里云反向代理的流式转发待验收。
 - SNAP-01 · Done：统一 SnapshotManifest / QueryContext / MessageSnapshotRef、任意 MIME 数据、真实字节 hash、通用校验器和隔离 viewer；7 个 dummy fixture 仅用于回归。
 - MODEL-01 · Done：DeepSeek 通过固定版本 Claude Code Agent Runtime 接入，服务端密钥、输入限制、错误处理、普通对话、页面回归和目标数据源鉴权读取已验证。
 - GEN-01 · Review：文本／快照在同一 Agent Runtime 中处理；Agent 可调用 `submit_snapshot` MCP，宿主继续负责严格 SnapshotDraft、受信字段、hash 和隔离展示。已移除关键词分流和 prompt 修复，待第二种表现、空／边界样本和产品复核。

@@ -50,6 +50,9 @@
 
 ## 已覆盖
 
+- 2026-09-22 Agent 执行记录执行 `npm run check`：52/52 Node、Worker 构建、7 个 fixture 通过；执行 `npm run test:e2e`：32/32 Chromium／WebKit 通过。覆盖多数据源逐次编号、读取／鉴权类别、真实状态码与耗时、失败标注、中断后未确认返回、最终回复折叠记录、默认收起、窄宽度横向滚动与减少动态效果，以及 URL／响应／密钥不进入进度事件。另以真实 DeepSeek Runtime 对 Timeline 公开根路径做只读冒烟：模型发起 6 次 `project_http_request`，每次均收到实际 404，步骤编号、失败状态和耗时正确上报；这不构成目标看板读取验收。真实 DeepSeek 页面会话和阿里云代理流式转发仍待人工验收。
+- 2026-09-21 Agent 进度流执行 `npm run check`：52/52 Node、Worker 构建、7 个 fixture 通过；执行 `npm run test:e2e`：30/30 Chromium／WebKit 通过。验证真实运行时的工具事件映射、进度先于最终结果、旧 JSON 兼容、工具参数／密钥不进入进度事件，以及页面中状态和等待时间先于最终回复出现。阿里云代理流式转发与真实长耗时 DeepSeek 会话尚未人工验收。
+- 2026-09-21 在临时本机 4187 服务执行 HTTP 冒烟：`/api/chat` 响应为 `text/event-stream`、`X-Accel-Buffering: no`，先收到 `progress: accepted`，再收到最终 503（刻意不提供模型密钥），证明本地 Node 传输层不会缓存全部事件；未调用 DeepSeek。测试服务已停止。
 - 2026-09-21 OAuth Phase 0 执行 `npm run check`：49/49 Node、Worker 构建和 7 个 fixture 通过；新增 BFF Authorization Code + PKCE、state、一次性 transaction、默认不发送 `client_id`、JWT `user_id/user_name` 身份、可选 profile 查询、内存 session、过期、退出、生产 cookie、开放重定向、跨站退出、无效端点失败关闭、身份 header 伪造，以及生产模式拒绝 HTTP OAuth 和测试绕过。真实 DAO 登录仍需在已登记的 HTTPS 回调域名验收。
 - 2026-09-21 执行 `npm run test:e2e`：28/28 通过，Chromium 与 WebKit 各 14 个场景；新增未登录时只显示 DAO 登录墙、项目工作区不渲染的浏览器验证，登录后的原有 GUI、对话、快照和项目管理回归保持通过。浏览器回归使用显式 `XUYAN_AUTH_BYPASS=true`，不代表真实 OAuth 服务联调。
 

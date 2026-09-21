@@ -1,6 +1,8 @@
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import worker from '../dist/server/index.js';
-import { handleChat } from './api.mjs';
+import { handleChat, handleChatStream } from './api.mjs';
 import { createDaoOAuthApp } from './auth.mjs';
 import { createClaudeCodeRuntime } from './claude-runtime.mjs';
 import { handleSnapshotRequest } from './snapshots.mjs';
@@ -17,15 +19,24 @@ const server = createServer(async (req, res) => {
     const request = new Request(url, { method: req.method, headers: req.headers, signal: controller.signal, ...(['GET','HEAD'].includes(req.method) ? {} : { body: req, duplex: 'half' }) });
     let response;
     if (['/auth/login', '/oauth/callback', '/api/session', '/auth/logout'].includes(url.pathname)) response = await auth.handle(request);
-    else if (url.pathname === '/api/chat') response = await handleChat(request, localEnv, { auth, runtime });
+    else if (url.pathname === '/api/chat') response = request.headers.get('accept')?.includes('text/event-stream')
+      ? handleChatStream(request, localEnv, { auth, runtime })
+      : await handleChat(request, localEnv, { auth, runtime });
     else if (url.pathname.startsWith('/api/projects/') && url.pathname.includes('/snapshots')) response = await handleSnapshotRequest(request, localEnv, { auth });
     else response = await worker.fetch(request, localEnv);
     const responseHeaders = Object.fromEntries(response.headers);
     const setCookies = response.headers.getSetCookie?.() || [];
     if (setCookies.length) responseHeaders['set-cookie'] = setCookies;
     res.writeHead(response.status, responseHeaders);
-    res.end(Buffer.from(await response.arrayBuffer()));
-  } catch { if (!res.headersSent) res.writeHead(500); res.end('服务暂不可用'); }
+    if (response.headers.get('content-type')?.startsWith('text/event-stream')) {
+      res.flushHeaders();
+      await pipeline(Readable.fromWeb(response.body), res);
+    } else res.end(Buffer.from(await response.arrayBuffer()));
+  } catch {
+    if (res.destroyed || res.writableEnded) return;
+    if (!res.headersSent) res.writeHead(500);
+    res.end('服务暂不可用');
+  }
 });
 server.requestTimeout = 190000;
 server.listen(port, '127.0.0.1', () => console.log(`序言：http://127.0.0.1:${server.address().port}`));
