@@ -1,7 +1,9 @@
 # DAO OAuth 与项目 Tag 访问控制开发方案
 
+> 本文件保留 DAO OAuth、tag 和项目授权的详细设计；当前阶段、跨模块执行顺序与发布门槛以 [`PRODUCTION_RELEASE_PLAN.md`](PRODUCTION_RELEASE_PLAN.md) 为准。本文的拟议端点和响应格式须经真实 DAO 契约验证，不能视为上游已交付接口。
+
 更新日期：2026-09-21
-状态：Phase 0 已实现，等待真实 DAO OAuth 配置和人工联调；Phase 1 以后待实施
+状态：Phase 0 代码已实现、本地自动化与 mock 人工测试通过；真实 DAO HTTPS 回调未验收。Phase 1 以后待实施
 范围：公司 OAuth 登录、DAO tag 访问判断、真实项目持久化、Agent Runtime 入口保护
 不在本阶段：项目内细粒度角色、第三方系统操作策略、快照缓存、跨实例高可用 session
 
@@ -46,7 +48,7 @@
 浏览器
   -> DAO OAuth 登录
   -> 序言服务端建立 BFF session
-  -> 序言读取 DAO current-user/profile
+  -> 序言按实测契约确认 DAO 稳定用户身份（当前实现为 token JWT，profile 可选）
   -> 用户选择或进入一个项目
   -> 序言将 OAuth 身份和项目全部 tag 交给 DAO 判断
   -> 所有 tag 均未被 DAO 明确拒绝时，签发短期项目访问租约
@@ -194,7 +196,7 @@ POST /auth/logout
 3. 浏览器整页跳转到 DAO/Auth authorize endpoint。
 4. callback 严格校验 error、state、一次性 transaction、redirect URI 和 code。
 5. 服务端调用 token endpoint 交换 code。
-6. 服务端使用 DAO current-user/profile 获取稳定用户身份，不依赖业务服务自行猜测 token 是 JWT 还是 opaque。
+6. 当前 Phase 0 实现从 DAO token JWT 的 `user_id/user_name` 建立稳定身份，显式配置 profile URL 时可额外查询；真实 DAO HTTPS 联调须核对该契约。若 DAO 改为 current-user/profile 权威身份，则按实测响应调整 BFF，而不是从 token 格式猜测。
 7. 服务端旋转 session ID，保存 token、profile、scope 和过期时间。
 8. callback URL 清除 code/state 后跳回经过校验的同源路径。
 
@@ -473,7 +475,7 @@ Phase 0 明确不做：
 ### 10.0 Phase 0 最小登录验收
 
 - 未登录打开网站只显示 DAO 登录入口，现有项目界面不初始化。
-- 点击登录跳转到正确 DAO authorize 地址，携带正确 client、redirect、scope、state 和 PKCE challenge。
+- 点击登录跳转到正确 DAO authorize 地址，携带准确的 redirect、scope、state 和 PKCE challenge；当前契约不发送 `client_id`，若 DAO 后续要求显式 client，须先验证注册与回调绑定。
 - 成功 callback 建立 HttpOnly session，并回到原同源页面。
 - 登录后现有项目切换、对话、上下文、Agent、Timeline 和快照行为不变。
 - 刷新页面保持登录；主动退出后立即失效。
