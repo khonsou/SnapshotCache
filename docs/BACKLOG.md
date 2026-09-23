@@ -18,8 +18,8 @@
 ## 当前下一包 · Phase 0 收口
 
 - AUTH-REAL-01 · Next：在 DAO 已登记的 HTTPS 回调环境验证真实员工登录、`/api/session`、刷新、退出、过期及受保护 API；核对当前不发送 `client_id` 与 JWT 身份的真实契约。mock 通过不算退出。
-- AUTH-REAL-02 · Next：核查生产 `Secure`／`HttpOnly` cookie、精确回调、禁用测试绕过、OAuth token 不进入浏览器／Agent／日志；更新脱敏联调证据。
-- AUTH-REAL-03 · Next：如预发布回调尚未登记，协调 DAO 增加受控 HTTPS 回调；在此之前不宣称 Phase 0 完成。
+- AUTH-REAL-02 · Next：在获批 HTTPS 环境核查生产 `Secure`／`HttpOnly` cookie、精确回调、禁用测试绕过、OAuth token 不进入浏览器／Agent／日志；更新脱敏联调证据。生产启动配置校验与本地自动化已完成。
+- AUTH-REAL-03 · Next：取得已登记 HTTPS callback 域名/URI 与 DAO 真实 OAuth 配置契约后，在获批环境人工验收；步骤和证据模板见 `docs/testing/PHASE_0_DAO_OAUTH_ACCEPTANCE.md`。尚未联系 DAO、部署或执行真实验收。
 
 ## 随后开发包 · Phase 1–5
 

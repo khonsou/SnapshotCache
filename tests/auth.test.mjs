@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDaoOAuthApp, createMemoryAuthStore } from '../server/auth.mjs';
+import { assertProductionOAuthConfig, createDaoOAuthApp, createMemoryAuthStore, validateProductionOAuthConfig } from '../server/auth.mjs';
 
 const baseEnv = {
   DAO_OAUTH_CLIENT_ID: 'xuyan-test',
@@ -143,6 +143,32 @@ test('production refuses HTTP OAuth and test bypass even when requested by envir
   assert.equal((await app.handle(new Request('http://app.example.test/api/session'))).status, 503);
   assert.equal(await app.identity(new Request('http://app.example.test/api/chat')), null);
   assert.equal((await app.handle(new Request('http://app.example.test/auth/login'))).status, 503);
+});
+
+test('production startup requires pinned HTTPS endpoints and an exact callback on the public origin', () => {
+  const valid = {
+    NODE_ENV: 'production',
+    APP_PUBLIC_ORIGIN: 'https://auth-test.example.com',
+    DAO_OAUTH_REDIRECT_URI: 'https://auth-test.example.com/oauth/callback',
+    DAO_OAUTH_AUTHORIZATION_URL: 'https://auth.example.com/oauth/authorize',
+    DAO_OAUTH_TOKEN_URL: 'https://auth.example.com/api/oauth/token',
+    DAO_OAUTH_SCOPES: 'profile phone',
+  };
+  assert.deepEqual(validateProductionOAuthConfig(valid), []);
+  assert.doesNotThrow(() => assertProductionOAuthConfig(valid));
+
+  const invalid = validateProductionOAuthConfig({
+    ...valid,
+    DAO_OAUTH_REDIRECT_URI: 'https://other.example.com/oauth/callback?next=/evil',
+    DAO_OAUTH_TOKEN_URL: 'http://auth.example.com/token',
+  });
+  assert.deepEqual(invalid.sort(), ['DAO_OAUTH_REDIRECT_URI', 'DAO_OAUTH_TOKEN_URL']);
+  assert.throws(() => assertProductionOAuthConfig({ ...valid, DAO_OAUTH_AUTHORIZATION_URL: '' }), /DAO_OAUTH_AUTHORIZATION_URL/u);
+  assert.throws(() => assertProductionOAuthConfig({ ...valid, DAO_OAUTH_REDIRECT_URI: 'https://private-callback.example.com/oauth/callback?secret=hidden' }), error => {
+    assert.match(error.message, /DAO_OAUTH_REDIRECT_URI/u);
+    assert.doesNotMatch(error.message, /private-callback|hidden/u);
+    return true;
+  });
 });
 
 test('production cookies are host-only secure and external return targets are rejected', async () => {

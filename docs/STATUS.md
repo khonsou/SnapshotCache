@@ -1,6 +1,6 @@
-# 实现状态 · 2026-09-22
+# 实现状态 · 2026-09-23
 
-2026-09-22 并发／多用户隔离／定时自动化只读审查：当前单实例每用户最多 2 个运行、每分钟最多 20 次，但无整机总并发上限；生产项目准入和服务端可信上下文尚未实现。内存反例复现同项目多数据源秘密串用、已知秘密在普通响应字段中泄露给模型、回环 HTTPS 目标被接受、change-set actor 可由模型自报、同幂等键重复执行与预取消仍 spawn。**按现状阻断多用户生产与定时无人值守运行。** `npm run check` 通过 52 项 Node 测试／构建／7 个 fixture；`npm run test:e2e` 经本地监听授权重跑后 32 项通过。真实 DAO、阿里云容量和定时任务未验收。详情见 `docs/testing/CONCURRENCY_MULTIUSER_SCHEDULE_REVIEW_2026-09-22.md`。
+2026-09-22 并发／多用户隔离／定时自动化只读审查：当前单实例每用户最多 2 个运行、每分钟最多 20 次，但无整机总并发上限；生产项目准入和服务端可信上下文尚未实现。内存反例复现同项目多数据源秘密串用、已知秘密在普通响应字段中泄露给模型、回环 HTTPS 目标被接受、change-set actor 可由模型自报、同幂等键重复执行与预取消仍 spawn。**按现状阻断多用户生产与定时无人值守运行。** 本轮 `npm run check` 通过 53 项 Node 测试、构建和 7 个 fixture；`npm run test:e2e` 因沙箱禁止回环监听，获准重跑后 32 项通过。真实 DAO、阿里云容量和定时任务未验收。详情见 `docs/testing/CONCURRENCY_MULTIUSER_SCHEDULE_REVIEW_2026-09-22.md`。
 
 GUI、快照协议、DeepSeek Agent Runtime、Timeline 真实只读和最小 DAO OAuth 登录门禁已形成可工作的本地基线。**当前阶段是 Phase 0：真实 DAO HTTPS OAuth 登录验收**；本地 mock 不能替代该验收。后续依次确认 DAO tag 契约、持久化最小项目聚合、完成项目准入与真实 Agent 数据验收，再做阿里云预发布／生产。快照历史持久化与缓存后移，但真实项目持久化是生产前提。当前尚未发布；权威顺序见 `docs/PRODUCTION_RELEASE_PLAN.md`。
 
@@ -28,7 +28,7 @@ GUI、快照协议、DeepSeek Agent Runtime、Timeline 真实只读和最小 DAO
 - 当前页面仍是明确标注的本地演示壳；生产项目全真替换后必须移除硬编码项目、成员、消息和 fixture。
 - 最小 DAO OAuth 登录门禁已实现：服务端 BFF 按当前待验证契约完成 Authorization Code + PKCE，不发送 `client_id`，并直接从 Token Endpoint 返回的 DAO JWT `user_id/user_name` 建立 session；profile URL 仅作为可选覆盖。浏览器只持有 HttpOnly session cookie，聊天和快照身份不再信任请求自报 header。本地内存 session、登录墙、退出、过期和测试绕过已有自动化覆盖；生产模式禁止测试绕过和 HTTP OAuth。本仓库不包含 OAuth mock；真实 DAO 只允许生产回调，必须在该环境验收，tag 项目授权尚未开始。
 
-当前自动证据：52 项 Node 测试、7 个 fixture 校验、Worker 构建和 32 项 Chromium／WebKit 回归通过。OAuth 覆盖 PKCE、state、一次性 transaction、DAO JWT 身份、可选 profile 查询、内存 session、服务端过期、退出、生产 cookie、开放重定向、跨站退出和伪造身份 header；浏览器覆盖未登录登录墙、登录后原有功能及执行中进度展示。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
+当前自动证据：53 项 Node 测试、7 个 fixture 校验、Worker 构建和 32 项 Chromium／WebKit 回归通过。本轮新增生产 OAuth 启动配置约束测试；Phase 0 HTTPS 验收 runbook/evidence template 已建立，仍无真实 DAO 或部署证据。OAuth 覆盖 PKCE、state、一次性 transaction、DAO JWT 身份、可选 profile 查询、内存 session、服务端过期、退出、生产 cookie、开放重定向、跨站退出和伪造身份 header；浏览器覆盖未登录登录墙、登录后原有功能及执行中进度展示。真实 DeepSeek + Claude Code 2.1.270 已完成普通文本、DeepSeek 原生 WebSearch、`submit_snapshot` MCP 快照，以及经本地聊天 API 调用目标 Timeline 的 `project_http_request` 会话；响应明确返回 provider `deepseek`、model `deepseek-v4-flash`、真实 session、turns 和实际工具。原来的关键词分流、实时搜索判断、拒绝话术正则、强制工具调用和候选 prompt 修复循环已经移除。目标 Timeline 真实读取已由人工验收通过；受控 change-set 写入的宿主权限和模拟越权反例已完成，但尚未对真实看板执行写入。详情见 `docs/testing/P2_ACCEPTANCE.md`。
 
 ## 已具备
 
@@ -48,6 +48,7 @@ GUI、快照协议、DeepSeek Agent Runtime、Timeline 真实只读和最小 DAO
 - 生产项目全真验收；用户项目／上下文路径已实现，但当前页面状态刷新后重置，尚未建立服务端可信的最小项目聚合并完成 DAO tag 项目准入。真实成员来自 DAO，相关接口待确认。
 - 真实 DAO OAuth 人工联调与 tag 项目授权；最小 BFF 登录门禁已经实现，本地 mock 人工测试通过，但实际授权、token 与 HTTPS 回调尚未在 DAO 已登记域名验证，tag 与成员能力未接入。
 - 阿里云运行形态、密钥托管、域名、OAuth 回调、预发布环境和发布回退尚未确定或验收。
+- Phase 0 OAuth HTTPS 验收包已准备：生产 Node 启动要求显式 HTTPS 公网 origin、同 origin 的精确 `/oauth/callback`、显式 HTTPS DAO authorize/token endpoints 与 scopes，并拒绝生产 HTTP/bypass；变量名级错误不回显配置值。操作步骤与脱敏证据模板见 `docs/testing/PHASE_0_DAO_OAUTH_ACCEPTANCE.md`。真实 DAO 值、部署与登录均未进行，Phase 0 仍未验收。
 - 真实 Agent Runtime 的第二种快照表现、空／边界输入和产品体验复核；当前已完成普通文本与一类 `submit_snapshot` 快照的真实运行时冒烟测试，不再保留 prompt 修复路径。
 - 独立的快照模式切换控件；当前 P2 入口是对话中明确要求快照／看板／报告。
 - 模型长期记忆、自动上下文、动态连接凭据及生产生成任务恢复。

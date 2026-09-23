@@ -3,12 +3,13 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import worker from '../dist/server/index.js';
 import { handleChat, handleChatStream } from './api.mjs';
-import { createDaoOAuthApp } from './auth.mjs';
+import { assertProductionOAuthConfig, createDaoOAuthApp } from './auth.mjs';
 import { createClaudeCodeRuntime } from './claude-runtime.mjs';
 import { handleSnapshotRequest } from './snapshots.mjs';
 const port = Number(process.env.PORT || 4173);
 const publicOrigin = process.env.APP_PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
 const localEnv = { ...process.env, XUYAN_LOCAL: true, SNAPSHOT_LOCAL: true };
+assertProductionOAuthConfig(localEnv);
 const runtime = createClaudeCodeRuntime();
 const auth = createDaoOAuthApp({ env: localEnv });
 const server = createServer(async (req, res) => {
