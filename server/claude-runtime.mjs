@@ -32,7 +32,38 @@ function publicToolName(name) {
   return typeof name === 'string' ? name.replace(/^mcp__project__/, '') : null;
 }
 
-function collectRecord(record, state) {
+const PROGRESS_TOOLS = new Set(['WebSearch', 'project_http_request', 'submit_snapshot']);
+
+function httpProgress(input, allowedPrefixes) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
+  const method = input.method === 'GET' || input.method === 'POST' ? input.method : null;
+  let target;
+  try { target = new URL(input.url); }
+  catch { return {}; }
+  const prefix = allowedPrefixes.find(item => target.protocol === 'https:' && !target.username && !target.password && !target.hash && target.origin === item.origin
+    && (item.pathname === '/' || target.pathname === item.pathname || target.pathname.startsWith(`${item.pathname}/`)));
+  if (!prefix || !method) return {};
+  const origins = [...new Set(allowedPrefixes.map(item => item.origin))];
+  const source = origins.indexOf(target.origin) + 1;
+  if (method === 'GET') return { source, action: 'read' };
+  const path = target.pathname.replace(/\/+$/u, '');
+  if (/\/auth$/iu.test(path)) return { source, action: 'auth' };
+  if (/\/api\/boards\/[^/]+\/change-sets$/iu.test(path)) return { source, action: 'change_set' };
+  if (/\/api\/boards\/[^/]+\/change-sets\/[^/]+\/commit$/iu.test(path)) return { source, action: 'commit' };
+  return { source };
+}
+
+function resultStatus(part) {
+  const content = typeof part.content === 'string' ? part.content
+    : Array.isArray(part.content) ? part.content.find(item => item?.type === 'text')?.text : null;
+  if (typeof content !== 'string' || content.length > 1000000) return null;
+  try {
+    const status = JSON.parse(content).status;
+    return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+  } catch { return null; }
+}
+
+function collectRecord(record, state, onProgress, allowedPrefixes) {
   if (record?.type === 'system' && record.subtype === 'init') {
     state.init = {
       tools: Array.isArray(record.tools) ? record.tools.filter(name => typeof name === 'string') : [],
@@ -40,21 +71,43 @@ function collectRecord(record, state) {
         ? record.mcp_servers.map(server => ({ name: String(server?.name || ''), status: String(server?.status || '') }))
         : [],
     };
+    onProgress?.({ phase: 'runtime_ready' });
   }
   if (record?.type === 'assistant' && Array.isArray(record.message?.content)) {
     for (const part of record.message.content) {
       if (part?.type !== 'tool_use') continue;
       const name = publicToolName(part.name);
       if (name && !state.toolsUsed.includes(name)) state.toolsUsed.push(name);
+      if (PROGRESS_TOOLS.has(name)) {
+        const step = ++state.nextStep;
+        const metadata = name === 'project_http_request' ? httpProgress(part.input, allowedPrefixes) : {};
+        if (typeof part.id === 'string') state.toolIds.set(part.id, { name, step, startedAt: Date.now() });
+        onProgress?.({ phase: 'tool_started', tool: name, step, ...metadata });
+      }
+    }
+  }
+  if (record?.type === 'user' && Array.isArray(record.message?.content)) {
+    for (const part of record.message.content) {
+      if (part?.type !== 'tool_result') continue;
+      const call = state.toolIds.get(part.tool_use_id);
+      if (call) {
+        state.toolIds.delete(part.tool_use_id);
+        const status = call.name === 'project_http_request' ? resultStatus(part) : null;
+        const outcome = part.is_error === true || (status !== null && status >= 400) ? 'failed'
+          : status !== null && status >= 200 && status < 300 ? 'succeeded' : 'returned';
+        onProgress?.({ phase: 'tool_finished', tool: call.name, step: call.step,
+          durationMs: Math.max(0, Date.now() - call.startedAt), outcome, ...(status === null ? {} : { status }) });
+      }
     }
   }
   if (record?.type === 'result') state.result = record;
 }
 
-async function executeProcess({ binary, args, cwd, env, prompt, signal, spawnProcess }) {
+async function executeProcess({ binary, args, cwd, env, prompt, signal, spawnProcess, onProgress, allowedPrefixes = [] }) {
   return await new Promise((resolve, reject) => {
     const child = spawnProcess(binary, args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
-    const state = { buffer: '', stderr: '', bytes: 0, toolsUsed: [], result: null, init: null };
+    const state = { buffer: '', stderr: '', bytes: 0, toolsUsed: [], toolIds: new Map(), nextStep: 0, result: null, init: null };
+    const report = event => { try { onProgress?.(event); } catch { /* Progress is best-effort. */ } };
     const abort = () => child.kill('SIGTERM');
     signal?.addEventListener('abort', abort, { once: true });
     child.on('error', error => {
@@ -69,7 +122,7 @@ async function executeProcess({ binary, args, cwd, env, prompt, signal, spawnPro
       state.buffer = lines.pop() || '';
       for (const line of lines) {
         if (!line.trim()) continue;
-        try { collectRecord(JSON.parse(line), state); }
+        try { collectRecord(JSON.parse(line), state, report, allowedPrefixes); }
         catch { /* Claude Code may emit a non-event diagnostic line. */ }
       }
     });
@@ -79,7 +132,7 @@ async function executeProcess({ binary, args, cwd, env, prompt, signal, spawnPro
     child.on('close', code => {
       signal?.removeEventListener('abort', abort);
       if (state.buffer.trim()) {
-        try { collectRecord(JSON.parse(state.buffer), state); }
+        try { collectRecord(JSON.parse(state.buffer), state, report, allowedPrefixes); }
         catch { /* handled as a missing result below */ }
       }
       if (signal?.aborted) { reject(new ClaudeRuntimeError('timeout', 504)); return; }
@@ -102,7 +155,7 @@ async function executeProcess({ binary, args, cwd, env, prompt, signal, spawnPro
 
 export function createClaudeCodeRuntime({ spawnProcess = spawn } = {}) {
   return {
-    async execute({ env, project, context, messages, requestedMode, projectConfig, signal }) {
+    async execute({ env, project, context, messages, requestedMode, projectConfig, signal, onProgress }) {
       if (!env.DEEPSEEK_API_KEY) throw new ClaudeRuntimeError('not_configured', 503);
       const taskDir = await mkdtemp(join(tmpdir(), 'xuyan-agent-'));
       const configPath = join(taskDir, 'project-config.json');
@@ -163,6 +216,8 @@ export function createClaudeCodeRuntime({ spawnProcess = spawn } = {}) {
           prompt: runtimeUserPrompt(messages),
           signal,
           spawnProcess,
+          onProgress,
+          allowedPrefixes: projectConfig?.http?.allowedPrefixes || [],
         });
         let snapshotDraft = null;
         try { snapshotDraft = JSON.parse(await readFile(snapshotPath, 'utf8')); }

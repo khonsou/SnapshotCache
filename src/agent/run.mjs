@@ -21,13 +21,14 @@ export async function runAgent({
   projectConfig = null,
   runtime,
   signal,
+  onProgress,
   now = () => new Date(),
   idFactory = () => crypto.randomUUID(),
 }) {
   if (!runtime || typeof runtime.execute !== 'function') throw new AgentRunError('agent_runtime_unavailable', 503);
   let execution;
   try {
-    execution = await runtime.execute({ env, project, context, messages, requestedMode, projectConfig, signal });
+    execution = await runtime.execute({ env, project, context, messages, requestedMode, projectConfig, signal, onProgress });
   } catch (error) {
     if (error?.code && typeof error?.status === 'number') throw new AgentRunError(error.code, error.status);
     throw new AgentRunError(signal?.aborted ? 'timeout' : 'agent_runtime_failed', signal?.aborted ? 504 : 502);
@@ -60,6 +61,7 @@ export async function runAgent({
   const createdAt = now().toISOString();
   const scope = { tenantId: actorId, projectId: projectKey };
   try {
+    onProgress?.({ phase: 'validating_snapshot' });
     const draft = parseSnapshotDraft(JSON.stringify(execution.snapshotDraft));
     const source = execution.source || null;
     const query = await buildQueryContext({

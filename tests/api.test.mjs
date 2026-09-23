@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { handleChat } from '../server/api.mjs';
+import { handleChat, handleChatStream } from '../server/api.mjs';
 
 const env = { DEEPSEEK_API_KEY: 'test-secret', DEEPSEEK_MODEL: 'deepseek-flash' };
 const body = {
@@ -66,4 +66,59 @@ test('limits each hosted user to two simultaneous Agent Runtime sessions', async
   assert.equal((await handleChat(request(body, headers), env, { runtime, identity: { id: 'concurrent-user' } })).status, 429);
   finish.forEach(done => done());
   await Promise.all([first, second]);
+});
+
+test('chat stream emits only approved progress fields and preserves final JSON result', async () => {
+  const runtime = { execute: async ({ onProgress }) => {
+    onProgress({ phase: 'runtime_ready', secret: 'must-not-stream' });
+    onProgress({ phase: 'tool_started', tool: 'project_http_request', step: 1, source: 2, action: 'read', url: 'https://private.example.test', token: 'must-not-stream' });
+    onProgress({ phase: 'tool_started', tool: 'unapproved_tool', secret: 'must-not-stream' });
+    onProgress({ phase: 'tool_finished', tool: 'project_http_request', step: 1, outcome: 'failed', status: 403, durationMs: 1250, result: 'must-not-stream' });
+    return { mode: 'text', reply: '查询完成。', runtime: 'claude-code', sessionId: 'session-stream', turns: 2, toolsUsed: ['project_http_request'] };
+  } };
+  const response = handleChatStream(request(), env, { runtime, identity: { id: 'stream-user' }, idFactory: () => 'stream' });
+  assert.match(response.headers.get('content-type'), /text\/event-stream/u);
+  assert.equal(response.headers.get('x-accel-buffering'), 'no');
+  const events = (await response.text()).split('\n\n').filter(frame => frame.startsWith('event: ')).map(frame => {
+    const lines = frame.split('\n');
+    return { type: lines[0].slice(7), value: JSON.parse(lines[1].slice(6)) };
+  });
+  assert.deepEqual(events.filter(event => event.type === 'progress').map(event => event.value), [
+    { phase: 'accepted' }, { phase: 'runtime_ready' },
+    { phase: 'tool_started', tool: 'project_http_request', step: 1, source: 2, action: 'read' },
+    { phase: 'tool_finished', tool: 'project_http_request', step: 1, outcome: 'failed', status: 403, durationMs: 1250 },
+  ]);
+  const final = events.at(-1);
+  assert.equal(final.type, 'result');
+  assert.equal(final.value.status, 200);
+  assert.equal(final.value.body.reply, '查询完成。');
+  assert.doesNotMatch(JSON.stringify(events), /must-not-stream|private\.example/u);
+});
+
+test('chat stream preserves unauthenticated error and does not start runtime', async () => {
+  const response = handleChatStream(request(), env, { runtime: { execute: () => assert.fail('runtime must not start') } });
+  const output = await response.text();
+  assert.match(output, /"status":401/u);
+  assert.doesNotMatch(output, /event: progress/u);
+});
+
+test('chat progress arrives before the Agent finishes', async () => {
+  let finish;
+  const runtime = { execute: ({ onProgress }) => {
+    onProgress({ phase: 'runtime_ready' });
+    return new Promise(resolve => { finish = () => resolve({ mode: 'text', reply: '已完成。', runtime: 'claude-code', toolsUsed: [] }); });
+  } };
+  const response = handleChatStream(request(), env, { runtime, identity: { id: 'early-progress-user' } });
+  const reader = response.body.getReader();
+  const first = await reader.read();
+  assert.match(new TextDecoder().decode(first.value), /event: progress/u);
+  assert.equal(typeof finish, 'function');
+  finish();
+  let remainder = '';
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    remainder += new TextDecoder().decode(next.value);
+  }
+  assert.match(remainder, /"reply":"已完成。"/u);
 });

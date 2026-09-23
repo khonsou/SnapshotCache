@@ -30,6 +30,44 @@ function positiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function parseHttpsUrl(value) {
+  try {
+    const url = new URL(String(value || '').trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash) return null;
+    return url;
+  } catch { return null; }
+}
+
+/** Validate the deployment contract before a production listener accepts traffic. */
+export function validateProductionOAuthConfig(env = {}) {
+  if (env.NODE_ENV !== 'production') return [];
+  const errors = [];
+  const originValue = String(env.APP_PUBLIC_ORIGIN || '').trim();
+  const origin = parseHttpsUrl(originValue);
+  if (!origin || origin.pathname !== '/' || origin.search) errors.push('APP_PUBLIC_ORIGIN');
+
+  const redirectValue = String(env.DAO_OAUTH_REDIRECT_URI || '').trim();
+  const redirect = parseHttpsUrl(redirectValue);
+  if (!redirect || redirect.pathname !== '/oauth/callback' || redirect.search ||
+      (origin && redirect.origin !== origin.origin)) errors.push('DAO_OAUTH_REDIRECT_URI');
+
+  // Production must pin the upstream endpoints that were confirmed with DAO;
+  // development defaults remain convenient for local testing only.
+  for (const name of ['DAO_OAUTH_AUTHORIZATION_URL', 'DAO_OAUTH_TOKEN_URL']) {
+    if (!parseHttpsUrl(env[name])) errors.push(name);
+  }
+  if (env.DAO_OAUTH_PROFILE_URL && !parseHttpsUrl(env.DAO_OAUTH_PROFILE_URL)) errors.push('DAO_OAUTH_PROFILE_URL');
+  if (env.XUYAN_AUTH_BYPASS === 'true') errors.push('XUYAN_AUTH_BYPASS');
+  if (env.XUYAN_AUTH_ALLOW_HTTP === 'true') errors.push('XUYAN_AUTH_ALLOW_HTTP');
+  if (!String(env.DAO_OAUTH_SCOPES || '').trim()) errors.push('DAO_OAUTH_SCOPES');
+  return [...new Set(errors)];
+}
+
+export function assertProductionOAuthConfig(env = {}) {
+  const errors = validateProductionOAuthConfig(env);
+  if (errors.length) throw new Error(`Invalid production OAuth configuration: ${errors.join(', ')}`);
+}
+
 function safeReturnTo(value, origin) {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || /[\r\n]/u.test(value)) return '/';
   try {

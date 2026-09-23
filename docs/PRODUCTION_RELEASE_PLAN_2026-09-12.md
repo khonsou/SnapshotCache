@@ -1,5 +1,7 @@
 # 序言 · 生产首发计划 v3
 
+> 历史版本（2026-09-12）。Phase 0 OAuth 优先级和首发最小项目持久化要求已调整；当前阶段、执行顺序与发布门槛统一见 [`PRODUCTION_RELEASE_PLAN.md`](PRODUCTION_RELEASE_PLAN.md)。本文件不再作为执行依据。
+
 日期：2026-09-12
 
 状态：产品方向已确认；R0–R2 的本地实现已启动，真实 Timeline 与 OAuth 验收待外部配置

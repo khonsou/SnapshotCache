@@ -102,7 +102,7 @@ function acquireLimit(user) {
   return limit;
 }
 
-export async function handleChat(request, env, { auth = null, identity = null, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID() } = {}) {
+export async function handleChat(request, env, { auth = null, identity = null, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID(), onProgress = null } = {}) {
   if (request.method !== 'POST') return json({ error: '请使用 POST 请求。' }, 405);
   const authenticated = identity || (auth ? await auth.identity(request) : null);
   const user = authenticated?.id;
@@ -132,6 +132,7 @@ export async function handleChat(request, env, { auth = null, identity = null, r
   if (request.signal.aborted) abort();
   const timer = setTimeout(abort, responseMode === 'text' ? 90000 : 180000);
   try {
+    onProgress?.({ phase: 'accepted' });
     const createdAt = now().toISOString();
     const runId = `run-${idFactory()}`;
     const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
@@ -149,7 +150,7 @@ export async function handleChat(request, env, { auth = null, identity = null, r
     }
     let result;
     try {
-      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: responseMode, actorId: user, projectConfig: agentProjectConfig, runtime, signal: controller.signal, now, idFactory });
+      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: responseMode, actorId: user, projectConfig: agentProjectConfig, runtime, signal: controller.signal, onProgress, now, idFactory });
     } catch (error) {
       if (started?.created) await snapshotStore.failRun({ runId, actorId: user, projectKey, errorCode: error.code || 'agent_runtime_failed', repairCount: error.repairCount || 0, finishedAt: now().toISOString() });
       throw error;
@@ -207,4 +208,72 @@ export async function handleChat(request, env, { auth = null, identity = null, r
     request.signal.removeEventListener('abort', abort);
     limit.active--;
   }
+}
+
+const PROGRESS_PHASES = new Set(['accepted', 'runtime_ready', 'tool_started', 'tool_finished', 'validating_snapshot']);
+const PROGRESS_TOOLS = new Set(['WebSearch', 'project_http_request', 'submit_snapshot']);
+const PROGRESS_ACTIONS = new Set(['read', 'auth', 'change_set', 'commit']);
+const PROGRESS_OUTCOMES = new Set(['succeeded', 'failed', 'returned']);
+
+function publicProgress(event) {
+  if (!PROGRESS_PHASES.has(event?.phase)) return null;
+  if (!event.phase.startsWith('tool_')) return { phase: event.phase };
+  if (!PROGRESS_TOOLS.has(event.tool) || !Number.isInteger(event.step) || event.step < 1 || event.step > 1000) return null;
+  const value = { phase: event.phase, tool: event.tool, step: event.step };
+  if (event.tool === 'project_http_request') {
+    if (Number.isInteger(event.source) && event.source >= 1 && event.source <= 12) value.source = event.source;
+    if (PROGRESS_ACTIONS.has(event.action)) value.action = event.action;
+  }
+  if (event.phase === 'tool_finished') {
+    value.outcome = PROGRESS_OUTCOMES.has(event.outcome) ? event.outcome : 'returned';
+    if (event.tool === 'project_http_request' && Number.isInteger(event.status) && event.status >= 100 && event.status <= 599) value.status = event.status;
+    if (Number.isInteger(event.durationMs) && event.durationMs >= 0 && event.durationMs <= 1800000) value.durationMs = event.durationMs;
+  }
+  return value;
+}
+
+export function handleChatStream(request, env, dependencies = {}) {
+  const encoder = new TextEncoder();
+  const aborter = new AbortController();
+  const signal = AbortSignal.any([request.signal, aborter.signal]);
+  const runningRequest = new Request(request, { signal });
+  let heartbeat;
+  let closed = false;
+  const body = new ReadableStream({
+    start(controller) {
+      const send = (type, value) => {
+        if (closed) return;
+        try { controller.enqueue(encoder.encode(`event: ${type}\ndata: ${JSON.stringify(value)}\n\n`)); }
+        catch { closed = true; aborter.abort(); }
+      };
+      heartbeat = setInterval(() => {
+        if (!closed) {
+          try { controller.enqueue(encoder.encode(': keep-alive\n\n')); }
+          catch { closed = true; aborter.abort(); }
+        }
+      }, 15000);
+      const onProgress = event => {
+        const value = publicProgress(event);
+        if (value) send('progress', value);
+      };
+      void (async () => {
+        try {
+          const response = await handleChat(runningRequest, env, { ...dependencies, onProgress });
+          send('result', { status: response.status, body: await response.json() });
+        } catch {
+          send('result', { status: 502, body: { error: '服务暂不可用，请稍后重试。' } });
+        } finally {
+          clearInterval(heartbeat);
+          if (!closed) { closed = true; controller.close(); }
+        }
+      })();
+    },
+    cancel() { closed = true; clearInterval(heartbeat); aborter.abort(); },
+  });
+  return new Response(body, { headers: {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-store, no-transform',
+    'X-Accel-Buffering': 'no',
+    'X-Content-Type-Options': 'nosniff',
+  } });
 }

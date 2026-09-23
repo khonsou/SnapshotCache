@@ -69,6 +69,7 @@ function renderProject(project) {
   if(currentProject) histories[currentProject] = list.innerHTML;
   currentProject = project;
   list.innerHTML = project ? (histories[project] ?? initialMessages(project)) : '<div class="empty-conversation"><h2>留一点空间给新想法</h2><p>新建一个项目，或恢复已归档的项目。</p><button class="primary-button" data-manage-projects>管理项目</button></div>';
+  refreshAgentTraceTickers(list);
   document.querySelector('#project-title').textContent = project ? projects[project].title : '项目对话';
   syncMembersHeader();
   renderNavigation();
@@ -81,7 +82,109 @@ function replaceReply(project, token, body) {
   holder.innerHTML=currentProject===project?list.innerHTML:histories[project];
   holder.querySelector(`#${token}`)?.replaceWith(document.createRange().createContextualFragment(body));
   histories[project]=holder.innerHTML;
-  if(currentProject===project){list.innerHTML=histories[project];scrollDown();}
+  if(currentProject===project){list.innerHTML=histories[project];refreshAgentTraceTickers(list);histories[project]=list.innerHTML;scrollDown();}
+}
+const progressLabels={
+  accepted:'请求已接收，正在启动 Agent',
+  runtime_ready:'Agent 已启动，正在处理',
+  validating_snapshot:'正在校验快照',
+};
+const actionLabels={read:'读取',auth:'鉴权',change_set:'创建变更提案',commit:'提交变更'};
+function refreshAgentTraceTicker(trace){
+  const viewport=trace.querySelector('[data-agent-trace-viewport]');
+  const label=trace.querySelector('[data-agent-progress]');
+  if(!viewport||!label||!viewport.clientWidth)return;
+  label.classList.remove('is-scrolling');
+  label.style.removeProperty('--scroll-distance');
+  label.style.removeProperty('--scroll-duration');
+  const distance=Math.ceil(label.scrollWidth-viewport.clientWidth);
+  if(distance>3){
+    label.style.setProperty('--scroll-distance',`-${distance+8}px`);
+    label.style.setProperty('--scroll-duration',`${Math.min(15,Math.max(5,distance/22)).toFixed(1)}s`);
+    label.classList.add('is-scrolling');
+  }
+  label.title=label.textContent;
+}
+function refreshAgentTraceTickers(holder){holder.querySelectorAll('[data-agent-trace]').forEach(refreshAgentTraceTicker);}
+window.addEventListener('resize',()=>refreshAgentTraceTickers(list));
+function toolTitle(event){
+  if(event.tool==='WebSearch')return '联网搜索';
+  if(event.tool==='submit_snapshot')return '提交快照候选';
+  if(event.tool==='project_http_request')return `${Number.isInteger(event.source)&&event.source>=1&&event.source<=12?`数据源 ${event.source}`:'项目数据源'} · ${actionLabels[event.action]||'请求'}`;
+  return null;
+}
+function updateAgentProgress(project,token,event){
+  const holder=currentProject===project?list:document.createElement('div');
+  if(currentProject!==project)holder.innerHTML=histories[project]||'';
+  const root=holder.querySelector(`#${token}`);
+  if(!root)return;
+  const label=root.querySelector('[data-agent-progress]');
+  const trace=root.querySelector('[data-agent-trace]');
+  const steps=trace?.querySelector('[data-agent-trace-list]');
+  if(event.phase==='tool_started'&&Number.isInteger(event.step)&&event.step>=1&&event.step<=1000&&steps){
+    const title=toolTitle(event);
+    if(title&&!steps.querySelector(`[data-agent-step="${event.step}"]`)){
+      const item=document.createElement('li');
+      item.dataset.agentStep=String(event.step);
+      item.dataset.prefix=`${event.step}. ${title}`;
+      item.textContent=`${item.dataset.prefix} · 执行中`;
+      steps.append(item);
+      trace.querySelector('[data-agent-trace-count]').textContent=`执行记录 · ${steps.children.length} 步`;
+      if(label)label.textContent=item.textContent;
+    }
+  }else if(event.phase==='tool_finished'&&Number.isInteger(event.step)&&steps){
+    const item=steps.querySelector(`[data-agent-step="${event.step}"]`);
+    if(item){
+      const outcome=event.outcome==='failed'?'失败':event.outcome==='succeeded'?'成功':'已返回';
+      const status=Number.isInteger(event.status)&&event.status>=100&&event.status<=599?` · HTTP ${event.status}`:'';
+      const duration=Number.isInteger(event.durationMs)&&event.durationMs>=0?` · ${(event.durationMs/1000).toFixed(1)} 秒`:'';
+      item.textContent=`${item.dataset.prefix} · ${outcome}${status}${duration}`;
+      item.classList.toggle('failed',event.outcome==='failed');
+      if(label)label.textContent=`${item.textContent} · Agent 继续处理`;
+    }
+  }else if(label&&progressLabels[event.phase])label.textContent=progressLabels[event.phase];
+  if(currentProject===project&&trace)refreshAgentTraceTicker(trace);
+  histories[project]=holder.innerHTML;
+}
+function completedAgentTrace(project,token){
+  const holder=currentProject===project?list:document.createElement('div');
+  if(currentProject!==project)holder.innerHTML=histories[project]||'';
+  const trace=holder.querySelector(`#${token} [data-agent-trace]`);
+  if(!trace||!trace.querySelector('[data-agent-trace-list]')?.children.length)return '';
+  const finished=trace.cloneNode(true);
+  finished.removeAttribute('open');
+  finished.querySelectorAll('[data-agent-step]').forEach(item=>{
+    if(item.textContent.endsWith(' · 执行中'))item.textContent=`${item.dataset.prefix} · 未确认返回`;
+  });
+  finished.querySelector('[data-agent-trace-count]').textContent=`本轮执行记录 · ${finished.querySelector('[data-agent-trace-list]').children.length} 步`;
+  finished.querySelector('[data-agent-progress]').textContent=`最近：${finished.querySelector('[data-agent-trace-list] li:last-child').textContent}`;
+  return finished.outerHTML;
+}
+async function readChatStream(response,onProgress){
+  if(!response.body)throw new Error('服务器没有返回进度流。');
+  const reader=response.body.getReader();const decoder=new TextDecoder();
+  let buffer='';let final=null;
+  while(true){
+    const {done,value}=await reader.read();
+    if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    if(buffer.length>16000000)throw new Error('回复内容过大，请重试。');
+    let boundary;
+    while((boundary=buffer.indexOf('\n\n'))!==-1){
+      const frame=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);
+      if(frame.startsWith(':'))continue;
+      const lines=frame.split('\n');
+      const type=lines.find(line=>line.startsWith('event: '))?.slice(7);
+      const data=lines.find(line=>line.startsWith('data: '))?.slice(6);
+      if(!data)continue;
+      let payload;
+      try{payload=JSON.parse(data);}catch{throw new Error('进度流格式错误，请重试。');}
+      if(type==='progress')onProgress(payload);
+      else if(type==='result')final=payload;
+    }
+  }
+  if(!final||!Number.isInteger(final.status)||!final.body)throw new Error('回复未完成，请重试。');
+  return final;
 }
 async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
   text=text.trim();if(!text||!currentProject||activeRequests.has(currentProject))return;
@@ -97,19 +200,29 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
   if(!retryToken) list.insertAdjacentHTML('beforeend',message('me',`<p class="message-text">${escapeHtml(text)}</p>`,now));
   input.value='';
   const token=`reply-${++serial}`;
-  const loading=`<div id="${token}" role="status" aria-label="序言正在整理回复">${message('agent','<div class="typing"><i></i><i></i><i></i></div>',now)}</div>`;
+  const loading=`<div id="${token}" role="status" aria-label="序言正在整理回复">${message('agent','<div class="typing"><i></i><i></i><i></i></div><details class="agent-trace" data-agent-trace><summary><span class="agent-trace-count" data-agent-trace-count>执行记录 · 0 步</span><span class="agent-trace-viewport" data-agent-trace-viewport><span class="agent-progress" data-agent-progress>正在连接 Agent</span></span></summary><ol data-agent-trace-list></ol></details><small class="agent-elapsed" data-agent-elapsed aria-hidden="true">已等待 0 秒</small>',now)}</div>`;
   if(retryToken) list.querySelector(`#${retryToken}`)?.remove();
   list.insertAdjacentHTML('beforeend',loading);
+  refreshAgentTraceTickers(list);
   const controller=new AbortController();activeRequests.set(project,controller);
   pending.add(token);histories[project]=list.innerHTML;syncInput();scrollDown();
   const turns=[...(chatTurns[project]||[]).slice(-18),{role:'user',content:text}];
   const timeout=setTimeout(()=>controller.abort(),175000);
+  const startedAt=Date.now();
+  let lastProgressAt=startedAt;
+  const elapsed=setInterval(()=>{
+    if(currentProject!==project)return;
+    const node=list.querySelector(`#${token} [data-agent-elapsed]`);
+    if(node)node.textContent=`已等待 ${Math.floor((Date.now()-startedAt)/1000)} 秒 · 本阶段 ${Math.floor((Date.now()-lastProgressAt)/1000)} 秒`;
+  },250);
   try {
-    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
+    const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept':'text/event-stream, application/json'},signal:controller.signal,
       body:JSON.stringify({project:projects[project].title,projectKey:project,context:directory.getContext(project),messages:turns,responseMode:'auto',idempotencyKey})});
-    const result=await response.json().catch(()=>({error:'服务暂不可用，请通过服务端网址打开页面后重试。'}));
-    if(response.status===401){showAuthGate('登录已失效，请重新登录。');throw new Error('登录已失效，请重新登录。');}
-    if(!response.ok||typeof result.reply!=='string')throw new Error(result.error||'回复失败，请重试。');
+    const streamed=response.headers.get('content-type')?.includes('text/event-stream');
+    const outcome=streamed?await readChatStream(response,event=>{lastProgressAt=Date.now();updateAgentProgress(project,token,event);}):{status:response.status,body:await response.json().catch(()=>({error:'服务暂不可用，请通过服务端网址打开页面后重试。'}))};
+    const result=outcome.body;
+    if(outcome.status===401){showAuthGate('登录已失效，请重新登录。');throw new Error('登录已失效，请重新登录。');}
+    if(outcome.status<200||outcome.status>=300||typeof result.reply!=='string')throw new Error(result.error||'回复失败，请重试。');
     if(!pending.has(token))return;
     if(result.snapshotPackage)registerInlineSnapshotPackage(result);
     chatTurns[project]=[...turns,{role:'assistant',content:result.reply.slice(0,6000)}].slice(-18);
@@ -117,14 +230,16 @@ async function send(text, retryToken=null, idempotencyKey=crypto.randomUUID()) {
     const runtime=result.agentRun;
     const runtimeNote=runtime?`<p class="panel-note">Agent Runtime：${escapeHtml(runtime.name)} · 模型 ${escapeHtml(runtime.model||'DeepSeek')}${runtime.turns?` · ${runtime.turns} 轮`:''}${runtime.toolsUsed?.length?` · 工具 ${escapeHtml(runtime.toolsUsed.join('、'))}`:''}</p>`:'';
     const generated=result.snapshotRef?dynamicSnapshot(project,result):'';
-    replaceReply(project,token,message('agent',`<div class="agent-reply markdown-body">${renderAgentMarkdown(result.reply)}</div>${generated}${note}${runtimeNote}`,now,result.snapshotRef?'generated':'hit'));
+    const trace=completedAgentTrace(project,token);
+    replaceReply(project,token,message('agent',`<div class="agent-reply markdown-body">${renderAgentMarkdown(result.reply)}</div>${generated}${note}${runtimeNote}${trace}`,now,result.snapshotRef?'generated':'hit'));
   } catch(error) {
     if(!pending.has(token))return;
     const errorText=controller.signal.aborted?'回复超时，请稍后重试。':error instanceof TypeError?'无法连接服务，请稍后重试。':error.message;
     retries.set(token,{project,text,idempotencyKey});
-    replaceReply(project,token,`<div id="${token}" role="status">${message('agent',`<p class="message-text">${escapeHtml(errorText)}</p><button class="text-button" data-retry="${token}">重试</button>`,now)}</div>`);
+    const trace=completedAgentTrace(project,token);
+    replaceReply(project,token,`<div id="${token}" role="status">${message('agent',`<p class="message-text">${escapeHtml(errorText)}</p>${trace}<button class="text-button" data-retry="${token}">重试</button>`,now)}</div>`);
   } finally {
-    clearTimeout(timeout);pending.delete(token);
+    clearTimeout(timeout);clearInterval(elapsed);pending.delete(token);
     if(activeRequests.get(project)===controller)activeRequests.delete(project);
     syncInput();
   }
