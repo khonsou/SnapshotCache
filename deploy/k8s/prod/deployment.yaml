@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xuyan-agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: xuyan-agent
+  template:
+    metadata:
+      labels:
+        app: xuyan-agent
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 210
+      imagePullSecrets:
+        - name: __IMAGE_PULL_SECRET__
+      containers:
+        - name: app
+          image: __API_IMAGE__
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4173
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+          env:
+            - name: PORT
+              value: "4173"
+            - name: HOST
+              value: "0.0.0.0"
+            - name: NODE_ENV
+              value: production
+            - name: APP_PUBLIC_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: APP_PUBLIC_ORIGIN
+            - name: DAO_OAUTH_REDIRECT_URI
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DAO_OAUTH_REDIRECT_URI
+            - name: DAO_OAUTH_AUTHORIZATION_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DAO_OAUTH_AUTHORIZATION_URL
+            - name: DAO_OAUTH_TOKEN_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DAO_OAUTH_TOKEN_URL
+            - name: DAO_OAUTH_SCOPES
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DAO_OAUTH_SCOPES
+            - name: VITE_AUTH_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: VITE_AUTH_ORIGIN
+            - name: DEEPSEEK_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DEEPSEEK_MODEL
+            - name: DEEPSEEK_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: __APP_SECRET_NAME__
+                  key: DEEPSEEK_API_KEY
+                  optional: true
+            - name: DAO_OAUTH_CLIENT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: xuyan-agent-config
+                  key: DAO_OAUTH_CLIENT_ID
+            - name: DAO_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: __APP_SECRET_NAME__
+                  key: DAO_OAUTH_CLIENT_SECRET
+                  optional: true
+            - name: XUYAN_AUTH_BYPASS
+              value: "false"
+            - name: XUYAN_AUTH_ALLOW_HTTP
+              value: "false"
+          resources:
+            requests:
+              memory: 512Mi
+              cpu: 250m
+            limits:
+              memory: 2Gi
+              cpu: 1500m
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault

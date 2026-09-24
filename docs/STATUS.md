@@ -1,5 +1,13 @@
 # 实现状态 · 2026-09-23
 
+## 2026-09-24 阿里云 K8s 优化部署
+
+- 已将生产 Pod 从 Node + Nginx sidecar 收敛为单 Node 容器：Node 监听 `0.0.0.0:4173`，Service 直接转发到 `4173`，Ingress 保留 SSE 不缓冲配置。
+- 已加入 `/api/health` startup/readiness/liveness 探针、`automountServiceAccountToken: false`、默认 seccomp、能力降权和 Node `SIGTERM` 优雅退出。
+- 已清理 Claude Code 未使用的 optional 平台副本；镜像本地体积由约 664MiB 降至约 445MiB，集群拉取层约 175MiB。
+- 2026-09-24 已部署到配置的 K8s namespace：单 Pod 为 `1/1 Ready`，HTTPS `/` 返回 200，`/api/health` 返回 configured=true，未登录 `/api/session` 返回 401。私有镜像 digest 和集群标识不写入仓库；证据见 `docs/testing/ALIYUN_K8S_DEPLOY_2026-09-24.md`。
+- 本地 `npm run check` 和 `npm run test:e2e` 仍受 Windows 测试路径及未安装 Playwright 浏览器阻断；真实 DAO、项目持久化、DAO tag、Agent 安全反例与 Timeline 写入仍未验收。此次部署不代表生产阻断项已解除。
+
 2026-09-22 并发／多用户隔离／定时自动化只读审查：当前单实例每用户最多 2 个运行、每分钟最多 20 次，但无整机总并发上限；生产项目准入和服务端可信上下文尚未实现。内存反例复现同项目多数据源秘密串用、已知秘密在普通响应字段中泄露给模型、回环 HTTPS 目标被接受、change-set actor 可由模型自报、同幂等键重复执行与预取消仍 spawn。**按现状阻断多用户生产与定时无人值守运行。** 本轮 `npm run check` 通过 53 项 Node 测试、构建和 7 个 fixture；`npm run test:e2e` 因沙箱禁止回环监听，获准重跑后 32 项通过。真实 DAO、阿里云容量和定时任务未验收。详情见 `docs/testing/CONCURRENCY_MULTIUSER_SCHEDULE_REVIEW_2026-09-22.md`。
 
 GUI、快照协议、DeepSeek Agent Runtime、Timeline 真实只读和最小 DAO OAuth 登录门禁已形成可工作的本地基线。**当前阶段是 Phase 0：真实 DAO HTTPS OAuth 登录验收**；本地 mock 不能替代该验收。后续依次确认 DAO tag 契约、持久化最小项目聚合、完成项目准入与真实 Agent 数据验收，再做阿里云预发布／生产。快照历史持久化与缓存后移，但真实项目持久化是生产前提。当前尚未发布；权威顺序见 `docs/PRODUCTION_RELEASE_PLAN.md`。
@@ -47,7 +55,7 @@ GUI、快照协议、DeepSeek Agent Runtime、Timeline 真实只读和最小 DAO
 - 目标 Timeline 看板的真实受控写入验收；真实读取已通过，但 change-set 创建、commit、幂等重试及写后回读尚未在目标看板执行。
 - 生产项目全真验收；用户项目／上下文路径已实现，但当前页面状态刷新后重置，尚未建立服务端可信的最小项目聚合并完成 DAO tag 项目准入。真实成员来自 DAO，相关接口待确认。
 - 真实 DAO OAuth 人工联调与 tag 项目授权；最小 BFF 登录门禁已经实现，本地 mock 人工测试通过，但实际授权、token 与 HTTPS 回调尚未在 DAO 已登记域名验证，tag 与成员能力未接入。
-- 阿里云运行形态、密钥托管、域名、OAuth 回调、预发布环境和发布回退尚未确定或验收。
+- 2026-09-23：已准备 prod K8s 与镜像构建配置；Node 应用由同 Pod Nginx sidecar 转发到 loopback listener。配置不挂 NAS PVC，因为当前 Node 路径不写项目/对话文件；这不提供用户数据持久化。清单经 server-side dry-run 通过；当时因部署环境未提供 `DEEPSEEK_API_KEY` 安全停止，没有创建 Secret、构建/推送镜像或 apply。DAO 精确回调未验收。证据见 `docs/testing/ALIYUN_K8S_DEPLOY_2026-09-23.md`。
 - Phase 0 OAuth HTTPS 验收包已准备：生产 Node 启动要求显式 HTTPS 公网 origin、同 origin 的精确 `/oauth/callback`、显式 HTTPS DAO authorize/token endpoints 与 scopes，并拒绝生产 HTTP/bypass；变量名级错误不回显配置值。操作步骤与脱敏证据模板见 `docs/testing/PHASE_0_DAO_OAUTH_ACCEPTANCE.md`。真实 DAO 值、部署与登录均未进行，Phase 0 仍未验收。
 - 真实 Agent Runtime 的第二种快照表现、空／边界输入和产品体验复核；当前已完成普通文本与一类 `submit_snapshot` 快照的真实运行时冒烟测试，不再保留 prompt 修复路径。
 - 独立的快照模式切换控件；当前 P2 入口是对话中明确要求快照／看板／报告。

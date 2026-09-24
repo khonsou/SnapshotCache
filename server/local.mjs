@@ -7,6 +7,7 @@ import { assertProductionOAuthConfig, createDaoOAuthApp } from './auth.mjs';
 import { createClaudeCodeRuntime } from './claude-runtime.mjs';
 import { handleSnapshotRequest } from './snapshots.mjs';
 const port = Number(process.env.PORT || 4173);
+const host = process.env.HOST || '127.0.0.1';
 const publicOrigin = process.env.APP_PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
 const localEnv = { ...process.env, XUYAN_LOCAL: true, SNAPSHOT_LOCAL: true };
 assertProductionOAuthConfig(localEnv);
@@ -40,4 +41,13 @@ const server = createServer(async (req, res) => {
   }
 });
 server.requestTimeout = 190000;
-server.listen(port, '127.0.0.1', () => console.log(`序言：http://127.0.0.1:${server.address().port}`));
+let shuttingDown = false;
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 200000).unref();
+}
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);
+server.listen(port, host, () => console.log(`序言：http://${host}:${server.address().port}`));

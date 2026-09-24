@@ -1,0 +1,2 @@
+# 快照样例按字节精确校验（manifest 里记录 byteLength 与 sha256），检出时绝不能做 EOL 转换。
+examples/snapshots/** -text

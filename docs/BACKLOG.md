@@ -77,7 +77,7 @@ R3 验收：用户和项目数据全部真实，身份与授权只能由可信 O
 
 ## R4–R5 · 阿里云预发布与生产首发
 
-- CLOUD-01 · Proposed：确认阿里云运行产品、网络、域名、TLS、出站策略、超时／并发、密钥托管和日志方案。
+- CLOUD-01 · In progress：2026-09-24 已完成 prod/default 的镜像构建、推送和 K8s apply；删除 Nginx sidecar，Node 直接监听 4173，健康探针和 HTTPS 基础链路已在线验证。仍需真实 DAO 回调、项目持久化、出站策略、容量、日志、回退和安全阻断验收；当前源码不持久化用户项目数据，清单不挂 NAS。证据见 `docs/testing/ALIYUN_K8S_DEPLOY_2026-09-24.md`。
 - CLOUD-02 · Proposed：把 Cloudflare 特有入口与 D1/R2 放到可选平台适配层；首发快照生成可无跨会话存储，但项目聚合必须持久化。
 - CLOUD-03 · Proposed：在阿里云预发布环境跑通真实 OAuth → 真实项目 → Timeline → 模型 → 快照 → viewer。
 - RELEASE-01 · Proposed：完成配置清单、构建、健康检查、日志脱敏、回退演练和安全／真实性阻断检查。

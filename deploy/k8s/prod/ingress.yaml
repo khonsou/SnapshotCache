@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: xuyan-agent
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 256k
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "200"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "200"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - __APP_HOST__
+      secretName: __TLS_SECRET_NAME__
+  rules:
+    - host: __APP_HOST__
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: xuyan-agent
+                port:
+                  number: 80
