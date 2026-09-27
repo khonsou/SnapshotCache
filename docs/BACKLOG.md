@@ -1,32 +1,37 @@
 # 研发任务
 
-更新日期：2026-09-22
+更新日期：2026-09-27
 
-当前顺序：**Phase 0 真实 DAO OAuth 验收（当前）→ Phase 1 DAO tag／成员契约 → Phase 2 最小项目持久化 → Phase 3 DAO 项目准入 → Phase 4 宿主安全收口与真实 Agent／数据／快照验收 → Phase 5 阿里云隔离、容量预发布与首发 → 发布后只读定时任务、快照持久化和缓存。** 已完成的 GUI、快照协议、DeepSeek Runtime 与 Timeline 读取作为基线维护。
+当前顺序：**Phase 0 真实 DAO OAuth 验收（用户确认完成）→ Phase 2 最小项目持久化（代码与本地自动化完成，待真实身份/Agent 回归）→ Phase 4A 宿主安全与真实 Agent／数据／快照验收 → Phase 4B 跨员工共享的只读问答缓存 → Phase 5 阿里云隔离、容量预发布与首发 → 发布后按需评估 DAO tag、定时任务、快照持久化与缓存。** 首发所有已登录员工均可访问站内项目。已完成的 GUI、快照协议、DeepSeek Runtime 与 Timeline 读取作为基线维护；详细范围见 `docs/PRODUCTION_RELEASE_PLAN.md`。
 
-首发允许无快照历史回放和缓存，但最小项目聚合必须在生产前持久化。详细顺序、测试范围和阻断条件见 `docs/PRODUCTION_RELEASE_PLAN.md`。下方 R0–R5 编号是已有任务线索，不再代表执行先后。
+首发允许无快照历史回放和快照缓存，但最小项目聚合与共享只读问答缓存必须在生产前持久化。详细顺序、测试范围和阻断条件见 `docs/PRODUCTION_RELEASE_PLAN.md`。下方 R0–R5 编号是已有任务线索，不再代表执行先后。
 
 ## 2026-09-22 审查新增阻断项
 
-- ISOLATION-01 · Proposed：在 Phase 2/3 服务端可信项目聚合与 DAO 准入中，替换客户端项目/context 自报及会重用的 `local-N` ID；共享项目分别保存 `tenantId/projectId/actorId`，覆盖所有读写与 Agent 入口。
+- ISOLATION-01 · Implemented, local tests passed（Phase 2）：服务端生成项目 ID、保存可信项目聚合；正式页面聊天仅提交项目 ID 与消息，服务端装载上下文和对话。共享项目的快照 scope 分离 tenant/project，消息保存 actor。真实身份/Agent 数据回归待验收。
 - ISOLATION-02 · Proposed（Phase 4）：为秘密引用绑定目标数据源、方法和用途；所有返回模型的字符串替换已知秘密；对私网/回环目标制定可验证的服务器出站策略；由宿主绑定 change-set 审计 actor。上线前以跨源、回环、普通字段泄密与伪造 actor 反例验收。
 - CAPACITY-01 · Proposed（Phase 5）：在单实例首发前测量真实进程内存/时延/成本，设置整机和项目总并发、队列上限、预算及过载响应；子进程支持预取消、TERM→KILL、进程树与临时目录硬清理。明确并验收任务级 OS 隔离方案，禁止把独立进程等同于沙箱。
 - SCHEDULE-01 · Proposed（生产首发验收后）：先确定 DAO 服务身份/用户委托契约，持久化任务及 `scheduleId + plannedFireTime` 唯一运行记录、租约、重试与停用/删除失效；外部调度器只传无秘密 ID。第一版限制为只读文本，自动快照依赖快照结果持久化，自动写入另需明确授权与目标端幂等验收。
 
-证据与优先级见 `docs/testing/CONCURRENCY_MULTIUSER_SCHEDULE_REVIEW_2026-09-22.md`。下列原有阶段顺序仍有效。
+2026-09-22 审查证据见 `docs/testing/CONCURRENCY_MULTIUSER_SCHEDULE_REVIEW_2026-09-22.md`；上述安全与容量阻断项仍须在 Phase 4A/5 收口，执行顺序以本文件顶部和统一计划为准。
 
-## 当前下一包 · Phase 0 收口
+## 已完成门禁 · Phase 0（用户确认真实环境验收完成）
 
-- AUTH-REAL-01 · Next：在 DAO 已登记的 HTTPS 回调环境验证真实员工登录、`/api/session`、刷新、退出、过期及受保护 API；核对当前不发送 `client_id` 与 JWT 身份的真实契约。mock 通过不算退出。
-- AUTH-REAL-02 · Next：在获批 HTTPS 环境核查生产 `Secure`／`HttpOnly` cookie、精确回调、禁用测试绕过、OAuth token 不进入浏览器／Agent／日志；更新脱敏联调证据。生产启动配置校验与本地自动化已完成。
-- AUTH-REAL-03 · Next：取得已登记 HTTPS callback 域名/URI 与 DAO 真实 OAuth 配置契约后，在获批环境人工验收；步骤和证据模板见 `docs/testing/PHASE_0_DAO_OAUTH_ACCEPTANCE.md`。尚未联系 DAO、部署或执行真实验收。
+- AUTH-REAL-01 · User accepted：用户确认真实环境 OAuth 测试与验收完成；具体 `/api/session`、刷新、退出、过期与受保护 API 的逐项脱敏结果尚未归档，不单独宣称已验证。
+- AUTH-REAL-02 · Evidence pending：生产 cookie、精确回调和 token 不泄露等逐项记录等待归档；本地自动化已覆盖相应代码路径。
+- AUTH-REAL-03 · User accepted：真实环境联调已由用户确认完成。此前本地 `.env` 和生产配置预检的记录保留在 `docs/testing/PHASE_0_DAO_OAUTH_ACCEPTANCE.md`，不把本地记录当作真实验收细节。
 
-## 随后开发包 · Phase 1–5
+## 当前与随后开发包 · Phase 2、4、5
 
-- DAO-CONTRACT-01 · Proposed：取得 user/tag 稳定标识、三态批量授权、成员接口和脱敏真实响应；验证 deny 与 not_found 可区分，DAO 错误失败关闭。
-- PROJECT-STORE-01 · Proposed：实现服务端最小项目聚合与加密上下文；聊天从服务端加载项目，项目删除级联，重启后项目保留。
-- DAO-ACCESS-01 · Proposed：多 tag 一票否决、10 分钟以内项目租约及失效机制，保护项目 CRUD、对话、上下文、快照和 Agent 入口；替换生产演示数据。
+- PROJECT-STORE-01 · Implemented, local tests passed：单实例文件仓库 AES-256-GCM 保存项目、上下文与对话；所有已登录员工共享，服务端加载上下文，项目删除级联，重启后保留。生产需持久挂载卷与保管密钥；真实多员工回归待验收。
+- PROJECT-REAL-01 · Implemented, local tests passed：Node 正式页面无演示项目／成员，聊天不信任客户端项目事实；保存 actor，未登录不能读写项目、对话或上下文。生产静态路径阻止 dummy fixture；缓存尚未实现。
+- AUTH-MOCK-01 · Done：非生产模式提供需点击的本地 mock OAuth 登录页及普通服务端 session；生产配置拒绝 mock，生产路由返回 404。
+- DAO-CONTRACT-01 · Deferred：未来若启用 tag 项目限制，再取得 user/tag 稳定标识、三态批量授权、成员接口和脱敏真实响应。
+- DAO-ACCESS-01 · Deferred：未来启用 tag 项目限制时，对项目 CRUD、对话、上下文、快照、Agent 和缓存统一执行授权。
 - AGENT-E2E-01 · Proposed：在专用测试看板验证 Timeline change-set 写入／回读、真实快照第二种表现及空／边界输入；其他数据源按真实上下文另测。
+- AGENT-USAGE-01 · Proposed：按项目记录每轮输入／输出 token、工具调用、耗时与模型版本，不记录提示词、第三方密钥或响应正文；建立普通对话、Timeline 读取和快照的成本基线。
+- CACHE-TEXT-01 · Proposed：项目级持久化只读问答缓存；仅精确复用已确认可独立回答的高频文本问句，命中时跳过 Agent 并展示原始观察时间。上下文变更、宿主写入、项目删除和 TTL 到期使其失效；提供显式重新查询，合并同一问句的并发未命中。
+- CACHE-TEXT-02 · Proposed：两名员工跨会话命中与零 Agent 调用、缓存失效、外部数据陈旧、跨项目隔离、未登录拒绝、秘密脱敏和追问不误命中的自动化及真实数据验收。
 - CLOUD-E2E-01 · Proposed：阿里云单实例、项目数据库、HTTPS 回调、密钥、出站、任务级隔离、真实 1/2/4 并发压测、SSE 不缓冲、故障与回退演练；通过后小范围内部发布。
 
 ## 已完成基线 · 1–4
@@ -59,21 +64,21 @@ R1 验收：真实 Timeline 数据可以稳定回答或生成协议合规快照�
 ## R2 · 项目数据全真替换
 
 - REAL-01 · Implemented：用户可随时新建、重命名、归档和删除项目；删除同步清理本地对话、上下文、成员和生成引用，不建立第二套服务器项目配置。
-- REAL-02 · In progress：Timeline 地址、board ID 和访问密码由用户项目上下文声明；密码在发送 DeepSeek 前脱敏。当前刷新后重置；生产前须将项目、tag、上下文与对话作为一个服务端聚合持久化并级联删除。
-- REAL-03 · Removed：取消部署级 `XUYAN_PROJECTS_JSON`／连接注册表作为生产方案；服务端保存单一项目聚合，用户-tag 访问关系由 DAO 判断。
+- REAL-02 · In progress：Timeline 地址、board ID 和访问密码由用户项目上下文声明；密码在发送 DeepSeek 前脱敏。当前刷新后重置；生产前须将项目、上下文与对话作为一个服务端聚合持久化并级联删除。
+- REAL-03 · Removed：取消部署级 `XUYAN_PROJECTS_JSON`／连接注册表作为生产方案；服务端保存单一项目聚合，首发所有已登录员工共享项目。
 - REAL-04 · Blocked：需要在用户创建项目的上下文中填入目标连接信息后，核对真实 Timeline 请求与快照 provenance。
 
 R2 验收：生产目标项目不含模拟业务事实，所有业务数据和上下文都有真实配置或 Timeline 响应依据。
 
-## R3 · 公司 OAuth 与真实授权（实际执行从 Phase 0 开始）
+## R3 · 公司 OAuth 登录（项目 tag 授权后移）
 
-- AUTH-00 · Implemented：最高优先级的最小 DAO OAuth 门禁已实现；BFF 按当前待验证契约不发送 `client_id`，Authorization Code + PKCE、state、同源 return path、JWT 身份、进程内 session、HttpOnly cookie、退出和 API 身份注入已有自动化覆盖。登录后保持现有项目与 Agent 行为且不读取 tag；真实 DAO 登录待生产回调环境验收。本仓库不包含 OAuth mock 服务。
-- AUTH-01 · In progress：核对开发、预发布和生产 redirect URI、scope、logout/revoke 及各环境配置；Phase 0 不要求额外 profile URL，DAO 后续若分配独立 client 可通过环境变量覆盖。
-- AUTH-02 · Review：登录、回调、内存 session、退出和过期处理已实现；覆盖 state、PKCE、一次性 transaction、cookie 和身份 header 伪造。真实 DAO 响应与生产 HTTPS cookie 待联调。
-- AUTH-03 · Proposed：根据服务端项目 tag 与 OAuth 身份向 DAO 查询项目准入；不另建本地成员权限或 Timeline 可见范围映射。生产环境不得接受客户端伪造身份。
-- AUTH-04 · Proposed：覆盖未登录、过期、跨用户、跨项目、成员移出、权限撤销和敏感信息泄露反例。
+- AUTH-00 · User accepted：最小 DAO OAuth 门禁已实现且用户确认真实环境验收通过；BFF 的 PKCE、state、session、退出和 API 身份注入已有自动化覆盖。本仓库不包含 OAuth mock 服务；逐项真实验收记录待归档。
+- AUTH-01 · Evidence pending：真实环境 redirect URI、scope、client ID、token 身份、退出和 cookie 检查的脱敏记录待归档，不影响当前 Phase 2 排期。
+- AUTH-02 · Implemented：登录、回调、内存 session、退出和过期处理已实现；覆盖 state、PKCE、一次性 transaction、cookie 和身份 header 伪造。
+- AUTH-03 · Deferred：未来若启用项目 tag 限制，再根据服务端项目 tag 与 OAuth 身份向 DAO 查询项目准入。
+- AUTH-04 · Proposed：首发覆盖未登录、过期、身份伪造、跨项目数据/缓存串用和敏感信息泄露反例；tag 撤权反例随未来 tag 功能实施。
 
-R3 验收：用户和项目数据全部真实，身份与授权只能由可信 OAuth 和服务端规则确定，严重越权为零。
+R3 首发验收：DAO 登录用户可以共享真实项目，未登录用户不能访问项目、对话、上下文、缓存或 Agent；严重越权为零。
 
 ## R4–R5 · 阿里云预发布与生产首发
 
@@ -83,13 +88,13 @@ R3 验收：用户和项目数据全部真实，身份与授权只能由可信 O
 - RELEASE-01 · Proposed：完成配置清单、构建、健康检查、日志脱敏、回退演练和安全／真实性阻断检查。
 - RELEASE-02 · Proposed：向明确授权的内部用户小范围发布，观察失败率、延迟、模型与 Timeline 错误及 token 成本。
 
-首发验收：真实用户能在 DAO 获准的持久项目中自由对话，并从真实数据生成可核对快照；页面明确说明快照结果刷新后可能消失，不能暗示项目本身会消失。
+首发验收：所有 DAO 已登录员工能在共享持久项目中自由对话，并从真实数据生成可核对快照；独立高频只读问答可以跨员工命中项目缓存且显示数据观察时间。页面明确说明快照结果刷新后可能消失，不能暗示项目本身会消失。
 
-## 发布后 · 持久化与缓存
+## 发布后 · 快照持久化与缓存
 
 - PERSIST-01 · Deferred：根据阿里云架构选择数据库／对象存储，先持久化消息引用和不可变快照，恢复刷新及跨会话回放。
 - PERSIST-02 · Deferred：持久 run、幂等恢复、失败清理、备份和恢复。
-- CACHE-01 · Deferred：查询规范化、active CAS、TTL、同查询生成协调和新鲜度。
-- CACHE-02 · Deferred：服务端／浏览器缓存、容量、隔离、淘汰和成本优化。
+- CACHE-01 · Deferred：快照查询规范化、active CAS、TTL、同查询生成协调和新鲜度；首发只读问答缓存由 `CACHE-TEXT-*` 追踪。
+- CACHE-02 · Deferred：快照服务端／浏览器缓存、容量、隔离、淘汰和成本优化。
 
-持久化优先于缓存。选型以真实流量、响应时间和 token 消耗证据为准，不预设 D1/R2、Redis 或阿里云具体产品。
+项目持久化优先于共享问答缓存；快照持久化和快照缓存后移。选型以真实流量、响应时间和 token 消耗证据为准，不预设 D1/R2、Redis 或阿里云具体产品。

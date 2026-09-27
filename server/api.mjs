@@ -4,6 +4,8 @@ import { createSitesSnapshotStore, StoreError } from '../src/platform/store.mjs'
 import { compileProjectContextRuntime } from '../src/platform/context-runtime.mjs';
 
 const limits = new Map();
+const runningProjects = new Set();
+export const projectRunActive = projectId => runningProjects.has(projectId);
 const MAX_BODY = 100000;
 
 export function json(value, status = 200) {
@@ -52,6 +54,11 @@ function errorMessage(code) {
     candidate_validation_failed: '生成的快照未通过安全校验，请调整要求后重试。',
     draft_json_invalid: '生成的快照格式无效，请调整要求后重试。',
     project_not_found: '当前项目不存在或尚未配置。',
+    project_archived: '项目已归档，请先恢复。',
+    project_busy: '这个项目正在处理另一条消息，请稍后重试。',
+    project_data_unreadable: '项目存储暂时不可用，请联系管理员。',
+    project_reply_unsaved: '回复未能保存；如果刚才要求修改外部数据，请先核对目标系统再重试。',
+    project_request_replayed: '这条快照请求已经处理过，但快照包仅在原页面有效。请发起新的请求。',
     project_config_invalid: '服务端项目配置无效，请联系管理员。',
     timeline_not_configured: 'Timeline 数据源尚未配置凭据，请联系管理员。',
     timeline_unauthorized: 'Timeline 登录已失效，请重试。',
@@ -102,7 +109,7 @@ function acquireLimit(user) {
   return limit;
 }
 
-export async function handleChat(request, env, { auth = null, identity = null, runtime = null, store, now = () => new Date(), idFactory = () => crypto.randomUUID(), onProgress = null } = {}) {
+export async function handleChat(request, env, { auth = null, identity = null, runtime = null, store, repository = null, now = () => new Date(), idFactory = () => crypto.randomUUID(), onProgress = null } = {}) {
   if (request.method !== 'POST') return json({ error: '请使用 POST 请求。' }, 405);
   const authenticated = identity || (auth ? await auth.identity(request) : null);
   const user = authenticated?.id;
@@ -113,19 +120,46 @@ export async function handleChat(request, env, { auth = null, identity = null, r
   let body;
   try { body = await readBody(request); }
   catch (error) { return json({ error: error.message === 'large' ? '消息过长，请缩短后重试。' : '请求格式不正确。' }, error.message === 'large' ? 413 : 400); }
-  const { project: submittedProject, projectKey, context: submittedContext, messages, responseMode = 'auto', idempotencyKey } = body || {};
-  if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 || messages.some(message => !message || !['user', 'assistant'].includes(message.role) || !validText(message.content, 6000) || !message.content.trim()) || messages.at(-1).role !== 'user' || !['auto', 'text', 'snapshot'].includes(responseMode)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
-  const project = submittedProject;
-  const context = submittedContext;
-  if (!validText(project, 80) || !project.trim() || !validText(context, 10000)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
+  const { responseMode = 'auto', idempotencyKey } = body || {};
+  if (!['auto', 'text', 'snapshot'].includes(responseMode) || !validText(idempotencyKey, 128) || !idempotencyKey.trim()) return json({ error: '消息或项目上下文格式不正确。' }, 400);
+  let project;
+  let projectKey;
+  let context;
+  let messages;
+  let inputMessage;
+  if (repository) {
+    projectKey = body?.projectId;
+    inputMessage = body?.message;
+    if (!validProjectKey(projectKey) || !validText(inputMessage, 6000) || !inputMessage.trim()) return json({ error: '请求缺少有效的项目或消息。' }, 400);
+    let record;
+    try { record = await repository.get(projectKey); }
+    catch (error) { return json({ error: errorMessage(error?.code || 'project_data_unreadable') }, error?.status || 503); }
+    if (record.archived) return json({ error: errorMessage('project_archived') }, 409);
+    const previous = record.messages.findIndex(item => item.role === 'user' && item.idempotencyKey === idempotencyKey);
+    if (previous >= 0) {
+      if (record.messages[previous].content !== inputMessage.trim()) return json({ error: '相同请求标识不能用于不同消息。' }, 409);
+      const answer = record.messages[previous + 1];
+      if (!answer || answer.role !== 'assistant' || answer.snapshotRef) return json({ error: errorMessage('project_request_replayed') }, 409);
+      return json({ reply: answer.content, replayed: true, truncated: false });
+    }
+    project = record.title;
+    context = record.context;
+    messages = [...record.messages.filter(item => item.role === 'user' || item.role === 'assistant').slice(-18).map(item => ({ role: item.role, content: item.content.slice(0, 6000) })), { role: 'user', content: inputMessage.trim() }];
+  } else {
+    ({ project, projectKey, context, messages } = { project: body?.project, projectKey: body?.projectKey, context: body?.context, messages: body?.messages });
+    if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 || messages.some(message => !message || !['user', 'assistant'].includes(message.role) || !validText(message.content, 6000) || !message.content.trim()) || messages.at(-1).role !== 'user') return json({ error: '消息或项目上下文格式不正确。' }, 400);
+    if (!validText(project, 80) || !project.trim() || !validText(context, 10000)) return json({ error: '消息或项目上下文格式不正确。' }, 400);
+  }
   const contextRuntime = compileProjectContextRuntime(context);
   const safeContext = contextRuntime.safeContext;
   const agentProjectConfig = contextRuntime.http
     ? { http: contextRuntime.http, policyVersion: 'user-context-v1' }
     : null;
-  if (!validProjectKey(projectKey) || !validText(idempotencyKey, 128) || !idempotencyKey.trim()) return json({ error: '请求缺少有效的项目或幂等标识。' }, 400);
+  if (!validProjectKey(projectKey)) return json({ error: '请求缺少有效的项目或幂等标识。' }, 400);
   const limit = acquireLimit(user);
   if (!limit) return json({ error: '请求较多，请稍后重试。' }, 429);
+  if (repository && runningProjects.has(projectKey)) { limit.active--; return json({ error: errorMessage('project_busy') }, 409); }
+  if (repository) runningProjects.add(projectKey);
   const controller = new AbortController();
   const abort = () => controller.abort();
   request.signal.addEventListener('abort', abort, { once: true });
@@ -135,7 +169,7 @@ export async function handleChat(request, env, { auth = null, identity = null, r
     onProgress?.({ phase: 'accepted' });
     const createdAt = now().toISOString();
     const runId = `run-${idFactory()}`;
-    const snapshotStore = store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
+    const snapshotStore = repository ? null : store || env.SNAPSHOT_STORE || (env.DB && env.BUCKET ? createSitesSnapshotStore(env) : null);
     let started = null;
     if (responseMode === 'snapshot' && snapshotStore) {
       started = await snapshotStore.startRun({ runId, actorId: user, projectKey, idempotencyKey, requestedMode: responseMode, modelConfigVersion: 'deepseek-claude-runtime-v1', contractVersion: 'p2-1', createdAt });
@@ -150,17 +184,19 @@ export async function handleChat(request, env, { auth = null, identity = null, r
     }
     let result;
     try {
-      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: responseMode, actorId: user, projectConfig: agentProjectConfig, runtime, signal: controller.signal, onProgress, now, idFactory });
+      result = await runAgent({ env, project, projectKey, context: safeContext, messages, requestedMode: responseMode, actorId: user, tenantId: repository ? (env.PROJECT_TENANT_ID || 'company') : user, projectConfig: agentProjectConfig, runtime, signal: controller.signal, onProgress, now, idFactory });
     } catch (error) {
       if (started?.created) await snapshotStore.failRun({ runId, actorId: user, projectKey, errorCode: error.code || 'agent_runtime_failed', repairCount: error.repairCount || 0, finishedAt: now().toISOString() });
       throw error;
     }
     if (result.mode === 'text') {
-      return json({ reply: result.reply, runId, agentRun: result.runtime, truncated: result.truncated });
+      const saved = repository ? await repository.appendExchange(projectKey, { message: inputMessage.trim(), reply: result.reply, actorId: user, actorName: authenticated?.name, idempotencyKey }) : null;
+      return json({ reply: result.reply, runId, agentRun: result.runtime, truncated: result.truncated, ...(saved ? { conversationMessageId: saved.assistantMessage?.id } : {}) });
     }
     if (!snapshotStore) {
       const messageId = `msg-${idFactory()}`;
       const generation = result.candidate.manifest.extensions['com.xuyan.generation'];
+      const saved = repository ? await repository.appendExchange(projectKey, { message: inputMessage.trim(), reply: result.reply, actorId: user, actorName: authenticated?.name, idempotencyKey, snapshotRef: result.candidate.ref }) : null;
       return json({
         reply: result.reply,
         runId,
@@ -168,11 +204,12 @@ export async function handleChat(request, env, { auth = null, identity = null, r
         snapshotPersistence: 'session',
         snapshotRef: result.candidate.ref,
         snapshotPackage: inlinePackage(result.candidate),
-        scope: { tenantId: user, projectId: projectKey },
+        scope: { tenantId: repository ? (env.PROJECT_TENANT_ID || 'company') : user, projectId: projectKey },
         sourceKind: generation.sourceKind,
         source: generation.source,
         title: result.candidate.title,
         messageId,
+        ...(saved ? { conversationMessageId: saved.assistantMessage?.id } : {}),
         agentRun: result.runtime,
         truncated: result.truncated,
       });
@@ -202,11 +239,13 @@ export async function handleChat(request, env, { auth = null, identity = null, r
     return json({ reply: result.reply, runId, snapshotStatus: 'generated', snapshotPersistence: 'stored', snapshotRef: { snapshotId: committed.snapshotId, manifestHash: committed.manifestHash }, scope: { tenantId: user, projectId: projectKey }, sourceKind: committed.sourceKind, title: committed.title, messageId, agentRun: result.runtime, truncated: result.truncated });
   } catch (error) {
     if (error instanceof AgentRunError || error instanceof StoreError) return json({ error: errorMessage(error.code), errorCode: error.code }, error.status || 502);
+    if (repository && error?.code?.startsWith?.('project_')) return json({ error: errorMessage('project_reply_unsaved'), errorCode: error.code }, error.status || 503);
     return json({ error: controller.signal.aborted ? errorMessage('timeout') : errorMessage('provider_unavailable') }, controller.signal.aborted ? 504 : 502);
   } finally {
     clearTimeout(timer);
     request.signal.removeEventListener('abort', abort);
     limit.active--;
+    if (repository) runningProjects.delete(projectKey);
   }
 }
 

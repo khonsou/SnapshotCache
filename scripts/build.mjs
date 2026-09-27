@@ -6,8 +6,19 @@ await mkdir('dist/server', { recursive: true });
 await mkdir('dist/.openai', { recursive: true });
 for (const name of ['index.html', 'style.css', 'project-directory.js', 'project-members.js']) await cp('src/web/' + name, 'dist/' + name);
 await build({ entryPoints: ['src/web/app.js'], outfile: 'dist/app.js', bundle: true, format: 'iife', target: ['es2022'], minify: true, legalComments: 'eof' });
+const demoScripts = '<script src="./project-directory.js"></script>\n  <script src="./project-members.js"></script>\n  <script src="./app.js"></script>';
+const sourceIndex = await readFile('src/web/index.html', 'utf8');
+if (!sourceIndex.includes(demoScripts)) throw new Error('Live index script marker missing');
+const liveIndex = sourceIndex
+  .replace(demoScripts, '<script src="./live-app.js"></script>')
+  .replace('<h1 id="project-title">秋季新品发布</h1>', '<h1 id="project-title">项目对话</h1>')
+  .replace('<button class="members" id="members-button" aria-label="管理项目成员" aria-haspopup="dialog" aria-controls="member-dialog">3 位成员</button>', '<button class="members" id="members-button" disabled hidden>全体已登录员工</button>')
+  .replace('本地演示 · 项目修改在刷新后重置', '项目和对话由服务端保存，所有已登录员工共享。')
+  .replace(/\s*<dialog id="member-dialog"[\s\S]*?<\/dialog>/u, '');
+await writeFile('dist/live-index.html', liveIndex);
+await build({ entryPoints: ['src/web/live-app.js'], outfile: 'dist/live-app.js', bundle: true, format: 'iife', target: ['es2022'], minify: true, legalComments: 'eof' });
 const assets = Object.create(null);
-for (const [name, type] of [['index.html', 'text/html'], ['style.css', 'text/css'], ['app.js', 'text/javascript'], ['project-directory.js', 'text/javascript'], ['project-members.js', 'text/javascript']]) assets['/' + name] = { body: (await readFile('dist/' + name)).toString('base64'), type: type + '; charset=utf-8' };
+for (const [name, type] of [['index.html', 'text/html'], ['live-index.html', 'text/html'], ['style.css', 'text/css'], ['app.js', 'text/javascript'], ['live-app.js', 'text/javascript'], ['project-directory.js', 'text/javascript'], ['project-members.js', 'text/javascript']]) assets['/' + name] = { body: (await readFile('dist/' + name)).toString('base64'), type: type + '; charset=utf-8' };
 assets['/'] = assets['/index.html'];
 const catalog = JSON.parse(await readFile('examples/snapshots/catalog.json'));
 const parents = new Map(catalog.entries.map(e => [e.ref.snapshotId, { scope: e.scope }]));

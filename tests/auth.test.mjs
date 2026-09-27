@@ -135,6 +135,32 @@ test('invalid OAuth endpoints fail closed while explicit test bypass remains iso
   assert.equal((await session.json()).user.id, 'local');
 });
 
+test('local mock OAuth requires a clicked login and creates a normal server session', async () => {
+  const app = createDaoOAuthApp({ env: { XUYAN_MOCK_OAUTH: 'true' } });
+  assert.equal((await app.handle(new Request('http://app.example.test/api/session'))).status, 401);
+  const login = await app.handle(new Request('http://app.example.test/auth/login?return_to=%2F'));
+  assert.equal(login.status, 302);
+  const target = new URL(login.headers.get('location'));
+  assert.equal(target.pathname, '/mock-oauth/login');
+  const transactionCookie = firstCookie(login, 'xuyan_oauth=');
+  const page = await app.handle(new Request(target, { headers: { Cookie: transactionCookie } }));
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /以本地测试用户登录/u);
+  const complete = await app.handle(new Request('http://app.example.test/mock-oauth/complete', {
+    method: 'POST', headers: { Cookie: transactionCookie, Origin: 'http://app.example.test', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ state: target.searchParams.get('state') }),
+  }));
+  assert.equal(complete.status, 302);
+  assert.equal(complete.headers.get('location'), 'http://app.example.test/');
+  const sessionCookie = firstCookie(complete, 'xuyan_session=');
+  assert.ok(sessionCookie);
+  const session = await app.handle(new Request('http://app.example.test/api/session', { headers: { Cookie: sessionCookie } }));
+  assert.equal((await session.json()).user.id, 'local-test-user');
+  assert.equal((await app.handle(new Request('http://app.example.test/mock-oauth/complete', { method: 'POST', headers: { Cookie: transactionCookie }, body: new URLSearchParams({ state: target.searchParams.get('state') }) }))).headers.get('location').includes('auth_error='), true);
+  const production = createDaoOAuthApp({ env: { NODE_ENV: 'production', XUYAN_MOCK_OAUTH: 'true' } });
+  assert.equal((await production.handle(new Request('http://app.example.test/mock-oauth/login'))).status, 404);
+});
+
 test('production refuses HTTP OAuth and test bypass even when requested by environment', async () => {
   const app = createDaoOAuthApp({ env: {
     NODE_ENV: 'production', XUYAN_AUTH_BYPASS: 'true', XUYAN_AUTH_ALLOW_HTTP: 'true',
@@ -155,6 +181,7 @@ test('production startup requires pinned HTTPS endpoints and an exact callback o
     DAO_OAUTH_SCOPES: 'profile phone',
   };
   assert.deepEqual(validateProductionOAuthConfig(valid), []);
+  assert.deepEqual(validateProductionOAuthConfig({ ...valid, XUYAN_MOCK_OAUTH: 'true' }), ['XUYAN_MOCK_OAUTH']);
   assert.doesNotThrow(() => assertProductionOAuthConfig(valid));
 
   const invalid = validateProductionOAuthConfig({

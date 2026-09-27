@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import worker from '../dist/server/index.js';
@@ -6,10 +7,21 @@ import { handleChat, handleChatStream } from './api.mjs';
 import { assertProductionOAuthConfig, createDaoOAuthApp } from './auth.mjs';
 import { createClaudeCodeRuntime } from './claude-runtime.mjs';
 import { handleSnapshotRequest } from './snapshots.mjs';
+import { createFileProjectRepository } from './project-repository.mjs';
+import { handleProjects } from './projects.mjs';
 const port = Number(process.env.PORT || 4173);
 const publicOrigin = process.env.APP_PUBLIC_ORIGIN || `http://127.0.0.1:${port}`;
 const localEnv = { ...process.env, XUYAN_LOCAL: true, SNAPSHOT_LOCAL: true };
 assertProductionOAuthConfig(localEnv);
+if (localEnv.NODE_ENV === 'production' && (!localEnv.PROJECT_DATA_DIR || !localEnv.PROJECT_ENCRYPTION_KEY)) {
+  throw new Error('Production project storage requires PROJECT_DATA_DIR and PROJECT_ENCRYPTION_KEY');
+}
+const repository = createFileProjectRepository({
+  directory: resolve(localEnv.PROJECT_DATA_DIR || '.local/projects'),
+  encryptionKey: localEnv.PROJECT_ENCRYPTION_KEY,
+  production: localEnv.NODE_ENV === 'production',
+});
+await repository.initialize();
 const runtime = createClaudeCodeRuntime();
 const auth = createDaoOAuthApp({ env: localEnv });
 const server = createServer(async (req, res) => {
@@ -19,11 +31,16 @@ const server = createServer(async (req, res) => {
     res.on('close', () => { if (!res.writableEnded) controller.abort(); });
     const request = new Request(url, { method: req.method, headers: req.headers, signal: controller.signal, ...(['GET','HEAD'].includes(req.method) ? {} : { body: req, duplex: 'half' }) });
     let response;
-    if (['/auth/login', '/oauth/callback', '/api/session', '/auth/logout'].includes(url.pathname)) response = await auth.handle(request);
+    if (['/auth/login', '/oauth/callback', '/api/session', '/auth/logout', '/mock-oauth/login', '/mock-oauth/complete'].includes(url.pathname)) response = await auth.handle(request);
     else if (url.pathname === '/api/chat') response = request.headers.get('accept')?.includes('text/event-stream')
-      ? handleChatStream(request, localEnv, { auth, runtime })
-      : await handleChat(request, localEnv, { auth, runtime });
-    else if (url.pathname.startsWith('/api/projects/') && url.pathname.includes('/snapshots')) response = await handleSnapshotRequest(request, localEnv, { auth });
+      ? handleChatStream(request, localEnv, { auth, runtime, repository })
+      : await handleChat(request, localEnv, { auth, runtime, repository });
+    else if (url.pathname === '/api/projects' || (url.pathname.startsWith('/api/projects/') && !url.pathname.includes('/snapshots'))) response = await handleProjects(request, { auth, repository });
+    else if (url.pathname.startsWith('/api/projects/') && url.pathname.includes('/snapshots')) response = localEnv.NODE_ENV === 'production' ? new Response(null, { status: 404 }) : await handleSnapshotRequest(request, localEnv, { auth });
+    else if ((url.pathname === '/' || url.pathname === '/index.html') && !(localEnv.XUYAN_DEMO_UI === 'true' && localEnv.NODE_ENV !== 'production')) {
+      response = await worker.fetch(new Request(new URL('/live-index.html', request.url), { method: request.method, headers: request.headers }), localEnv);
+    }
+    else if (localEnv.NODE_ENV === 'production' && (['/app.js', '/project-directory.js', '/project-members.js'].includes(url.pathname) || url.pathname.startsWith('/snapshots/'))) response = new Response(null, { status: 404 });
     else response = await worker.fetch(request, localEnv);
     const responseHeaders = Object.fromEntries(response.headers);
     const setCookies = response.headers.getSetCookie?.() || [];

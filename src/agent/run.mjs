@@ -18,6 +18,7 @@ export async function runAgent({
   messages,
   requestedMode = 'auto',
   actorId,
+  tenantId = actorId,
   projectConfig = null,
   runtime,
   signal,
@@ -59,7 +60,7 @@ export async function runAgent({
   }
 
   const createdAt = now().toISOString();
-  const scope = { tenantId: actorId, projectId: projectKey };
+  const scope = { tenantId, projectId: projectKey };
   try {
     onProgress?.({ phase: 'validating_snapshot' });
     const draft = parseSnapshotDraft(JSON.stringify(execution.snapshotDraft));

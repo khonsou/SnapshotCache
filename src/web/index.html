@@ -68,13 +68,13 @@
     <div id="project-context-view" hidden>
       <div class="manager-header"><div><h2 id="project-context-title">上下文</h2><p id="context-project-name"></p></div><button class="icon-button" id="close-context" aria-label="关闭项目管理"><svg><use href="#i-close"/></svg></button></div>
       <form id="context-form" class="context-form">
-        <p class="context-intro">在这里填写项目背景和数据源 Agent 接入说明。序言会把上下文中的 HTTPS 地址转换为受限的服务器端读取工具，并按说明完成协议探测、鉴权和查询；密码会转换成宿主密钥引用，不会把原值发给模型。</p>
+        <p class="context-intro">在这里填写项目背景和数据源 Agent 接入说明。序言会将上下文中的 HTTPS 地址转换为受限的服务器端工具，按说明完成协议探测、鉴权和查询。访问凭据由服务端处理。</p>
         <label class="sr-only" for="context-content">项目上下文</label>
         <textarea id="context-content" rows="12" maxlength="10000" placeholder="写下项目的目标、背景、要求，或直接粘贴相关资料链接…"></textarea>
         <p id="context-error" class="form-error" role="alert" hidden></p>
         <div class="context-actions"><button class="text-button" id="cancel-context" type="button">取消</button><button class="primary-button" type="submit">保存</button></div>
       </form>
-      <p class="manager-footnote">本次对话将使用此背景 · 刷新后重置，自动整理尚未接入</p>
+      <p class="manager-footnote">本项目后续对话将使用此背景。</p>
     </div>
   </dialog>
   <dialog id="member-dialog" aria-labelledby="member-dialog-title">

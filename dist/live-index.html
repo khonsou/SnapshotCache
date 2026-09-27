@@ -40,8 +40,8 @@
     <main class="main">
       <header class="chat-header">
         <button class="icon-button" id="menu-toggle" aria-label="显示侧边栏" aria-expanded="false" aria-controls="sidebar" title="显示侧边栏"><svg><use href="#i-menu"/></svg></button>
-        <h1 id="project-title">秋季新品发布</h1>
-        <button class="members" id="members-button" aria-label="管理项目成员" aria-haspopup="dialog" aria-controls="member-dialog">3 位成员</button>
+        <h1 id="project-title">项目对话</h1>
+        <button class="members" id="members-button" disabled hidden>全体已登录员工</button>
         <span class="auth-user" id="auth-user"></span>
         <button class="text-button auth-logout" id="auth-logout" type="button">退出</button>
         <button class="icon-button" id="new-chat" aria-label="开启新对话" title="开启新对话"><svg><use href="#i-edit"/></svg></button>
@@ -63,7 +63,7 @@
     <div class="manager-toolbar"><div class="manager-filters" role="group" aria-label="筛选项目"><button data-filter="active" aria-pressed="true">进行中</button><button data-filter="archived" aria-pressed="false">已归档</button></div><button class="text-button" id="add-project"><svg><use href="#i-plus"/></svg>新建项目</button></div>
     <form id="project-form" class="project-form" hidden><label for="project-name" id="project-name-label">项目名称</label><div class="project-form-row"><input id="project-name" required maxlength="40" autocomplete="off" placeholder="输入项目名称"><button class="primary-button" type="submit">保存</button><button class="text-button" id="cancel-project-edit" type="button">取消</button></div><p id="project-error" class="form-error" role="alert" hidden></p></form>
     <div id="managed-projects" class="managed-projects"></div>
-    <p class="manager-footnote" id="project-manager-feedback" role="status">本地演示 · 项目修改在刷新后重置</p>
+    <p class="manager-footnote" id="project-manager-feedback" role="status">项目和对话由服务端保存，所有已登录员工共享。</p>
     </div>
     <div id="project-context-view" hidden>
       <div class="manager-header"><div><h2 id="project-context-title">上下文</h2><p id="context-project-name"></p></div><button class="icon-button" id="close-context" aria-label="关闭项目管理"><svg><use href="#i-close"/></svg></button></div>
@@ -77,22 +77,7 @@
       <p class="manager-footnote">本项目后续对话将使用此背景。</p>
     </div>
   </dialog>
-  <dialog id="member-dialog" aria-labelledby="member-dialog-title">
-    <div class="manager-header"><div><h2 id="member-dialog-title">群聊成员</h2><p id="member-project-title"></p></div><button class="icon-button" id="close-members" aria-label="关闭成员管理"><svg><use href="#i-close"/></svg></button></div>
-    <div class="manager-toolbar"><span class="member-count" id="member-count"></span><button class="text-button" id="add-members"><svg><use href="#i-plus"/></svg>添加成员</button></div>
-    <form class="member-picker" id="member-picker" hidden>
-      <label for="member-search">从工作空间添加</label>
-      <input id="member-search" type="search" placeholder="搜索姓名" autocomplete="off">
-      <div id="member-candidates" class="member-candidates"></div>
-      <div class="member-picker-actions"><button class="text-button" id="cancel-add-members" type="button">取消</button><button class="primary-button" id="confirm-add-members" type="submit" disabled>添加</button></div>
-    </form>
-    <div id="member-list" class="member-list"></div>
-    <div class="member-agent"><span class="avatar avatar-agent"><svg><use href="#i-spark"/></svg></span><div class="member-name">序言<small>项目 Agent</small></div><span class="member-role-label">随项目加入</span></div>
-    <p id="member-feedback" class="manager-footnote" role="status" aria-live="polite">本地演示 · 成员修改在刷新后重置</p>
-  </dialog>
   <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
-  <script src="./project-directory.js"></script>
-  <script src="./project-members.js"></script>
-  <script src="./app.js"></script>
+  <script src="./live-app.js"></script>
 </body>
 </html>

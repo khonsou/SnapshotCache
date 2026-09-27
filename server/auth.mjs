@@ -58,6 +58,7 @@ export function validateProductionOAuthConfig(env = {}) {
   }
   if (env.DAO_OAUTH_PROFILE_URL && !parseHttpsUrl(env.DAO_OAUTH_PROFILE_URL)) errors.push('DAO_OAUTH_PROFILE_URL');
   if (env.XUYAN_AUTH_BYPASS === 'true') errors.push('XUYAN_AUTH_BYPASS');
+  if (env.XUYAN_MOCK_OAUTH === 'true') errors.push('XUYAN_MOCK_OAUTH');
   if (env.XUYAN_AUTH_ALLOW_HTTP === 'true') errors.push('XUYAN_AUTH_ALLOW_HTTP');
   if (!String(env.DAO_OAUTH_SCOPES || '').trim()) errors.push('DAO_OAUTH_SCOPES');
   return [...new Set(errors)];
@@ -230,6 +231,7 @@ export function createMemoryAuthStore({ now = () => Date.now() } = {}) {
 
 export function createDaoOAuthApp({ env = {}, fetcher = fetch, now = () => Date.now(), store = createMemoryAuthStore({ now }) } = {}) {
   const testBypass = env.NODE_ENV !== 'production' && env.XUYAN_AUTH_BYPASS === 'true';
+  const mockOAuth = env.NODE_ENV !== 'production' && env.XUYAN_MOCK_OAUTH === 'true';
   async function sessionFor(request, touch = true) {
     if (testBypass) {
       return { user: { id: 'local', name: '本地测试用户' }, absoluteExpiresAt: now() + SESSION_ABSOLUTE_MS, idleExpiresAt: now() + SESSION_IDLE_MS };
@@ -245,6 +247,16 @@ export function createDaoOAuthApp({ env = {}, fetcher = fetch, now = () => Date.
 
   async function login(request) {
     if (request.method !== 'GET') return authJSON({ error: 'method_not_allowed' }, 405);
+    if (mockOAuth) {
+      const names = cookieNames(request);
+      const transactionId = randomOpaque();
+      const state = randomOpaque();
+      const returnTo = safeReturnTo(new URL(request.url).searchParams.get('return_to'), new URL(request.url).origin);
+      await store.putTransaction(transactionId, { state, returnTo, mock: true, expiresAt: now() + TRANSACTION_MS });
+      const target = new URL('/mock-oauth/login', request.url);
+      target.searchParams.set('state', state);
+      return redirect(target.toString(), [cookie(names.transaction, transactionId, { maxAge: TRANSACTION_MS / 1000, secure: names.secure })]);
+    }
     const config = oauthConfig(env, request);
     if (!config.configured) return authJSON({ error: 'oauth_not_configured' }, 503);
     if (testBypass) return redirect(safeReturnTo(new URL(request.url).searchParams.get('return_to'), new URL(request.url).origin));
@@ -269,6 +281,40 @@ export function createDaoOAuthApp({ env = {}, fetcher = fetch, now = () => Date.
     const target = new URL('/', new URL(request.url).origin);
     target.searchParams.set('auth_error', code);
     return redirect(target.toString(), [cookie(names.transaction, '', { maxAge: 0, secure: names.secure })]);
+  }
+
+  async function mockLogin(request) {
+    if (!mockOAuth) return authJSON({ error: 'not_found' }, 404);
+    if (request.method !== 'GET') return authJSON({ error: 'method_not_allowed' }, 405);
+    const state = new URL(request.url).searchParams.get('state') || '';
+    if (!/^[A-Za-z0-9_-]{20,100}$/u.test(state)) return authJSON({ error: 'mock_state_invalid' }, 400);
+    const page = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>本地 DAO OAuth 模拟登录</title><style>body{font:16px/1.6 system-ui;background:#f5f5f4;color:#232323;display:grid;place-items:center;min-height:100vh;margin:0}.card{background:white;padding:32px;border-radius:16px;max-width:420px;box-shadow:0 10px 35px #0001}button{border:0;background:#202020;color:white;padding:12px 18px;border-radius:8px;font:inherit;cursor:pointer}</style><main class="card"><h1>本地 DAO OAuth 模拟登录</h1><p>仅供本机开发测试。点击后以“本地测试用户”登录，不会连接真实 DAO。</p><form method="post" action="/mock-oauth/complete"><input type="hidden" name="state" value="${state}"><button type="submit">以本地测试用户登录</button></form></main></html>`;
+    return new Response(page, { headers: noStore({ 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'" }) });
+  }
+
+  async function mockComplete(request) {
+    if (!mockOAuth) return authJSON({ error: 'not_found' }, 404);
+    if (request.method !== 'POST') return authJSON({ error: 'method_not_allowed' }, 405);
+    const origin = request.headers.get('origin');
+    if ((origin && origin !== new URL(request.url).origin) || request.headers.get('sec-fetch-site') === 'cross-site') return authJSON({ error: 'cross_site_forbidden' }, 403);
+    const names = cookieNames(request);
+    const body = await request.text();
+    if (body.length > 1024) return authJSON({ error: 'mock_request_invalid' }, 413);
+    const state = new URLSearchParams(body).get('state');
+    const transaction = await store.takeTransaction(readCookie(request, names.transaction));
+    if (!transaction?.mock || !state || state !== transaction.state) return callbackFailure(request, 'oauth_state_invalid', names);
+    const current = now();
+    const sessionId = randomOpaque();
+    await store.putSession(sessionId, {
+      user: { id: 'local-test-user', name: '本地测试用户' }, accessToken: 'local-mock-only',
+      tokenExpiresAt: current + SESSION_ABSOLUTE_MS, createdAt: current,
+      absoluteExpiresAt: current + SESSION_ABSOLUTE_MS, idleMs: SESSION_IDLE_MS,
+      idleExpiresAt: current + SESSION_IDLE_MS,
+    });
+    return redirect(new URL(transaction.returnTo, new URL(request.url).origin).toString(), [
+      cookie(names.transaction, '', { maxAge: 0, secure: names.secure }),
+      cookie(names.session, sessionId, { maxAge: SESSION_ABSOLUTE_MS / 1000, secure: names.secure }),
+    ]);
   }
 
   async function callback(request) {
@@ -327,7 +373,7 @@ export function createDaoOAuthApp({ env = {}, fetcher = fetch, now = () => Date.
   async function session(request) {
     if (request.method !== 'GET') return authJSON({ error: 'method_not_allowed' }, 405);
     const config = oauthConfig(env, request);
-    if (!config.configured && !testBypass) return authJSON({ authenticated: false, configured: false, error: 'oauth_not_configured' }, 503);
+    if (!config.configured && !testBypass && !mockOAuth) return authJSON({ authenticated: false, configured: false, error: 'oauth_not_configured' }, 503);
     const active = await sessionFor(request);
     if (!active) return authJSON({ authenticated: false, configured: true }, 401);
     return authJSON({ authenticated: true, configured: true, user: active.user, expiresAt: new Date(active.absoluteExpiresAt).toISOString() });
@@ -345,6 +391,8 @@ export function createDaoOAuthApp({ env = {}, fetcher = fetch, now = () => Date.
   async function handle(request) {
     const path = new URL(request.url).pathname;
     if (path === '/auth/login') return login(request);
+    if (path === '/mock-oauth/login') return mockLogin(request);
+    if (path === '/mock-oauth/complete') return mockComplete(request);
     if (path === '/oauth/callback') return callback(request);
     if (path === '/api/session') return session(request);
     if (path === '/auth/logout') return logout(request);

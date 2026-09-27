@@ -1,6 +1,6 @@
 # Phase 0 DAO OAuth HTTPS acceptance
 
-Status: **prepared; real DAO acceptance not performed**. This runbook does not authorize deployment or contact with DAO. Perform it only after an approved HTTPS environment and DAO callback registration are available.
+Status (2026-09-27): **user confirmed real-environment acceptance complete; itemized sanitized evidence has not been archived here**. The checklist below remains a record template; `NOT RECORDED` means the result was not supplied for this document, not that the test did not run. This runbook does not authorize further deployment or contact with DAO.
 
 ## Values to obtain before real acceptance
 
@@ -27,6 +27,8 @@ The Node BFF now refuses to start in production when the public origin or callba
 
 Local preparation evidence (2026-09-23): `npm run check` passed (53 Node tests, build, 7 fixtures); `npm run test:e2e` passed (32 Chromium/WebKit tests) after allowing the local Playwright server to bind loopback. These are local code checks only and do not count as real DAO acceptance.
 
+Local configuration update (2026-09-24): copied the deployment team's `.env` byte for byte into the Git-ignored local `.env` with mode `0600`. The three previous variables retained their values; the new file contains 18 assignments. With `NODE_ENV=production` supplied for the preflight, the application's production OAuth configuration validator passed; Node parsed the quoted scopes as `profile phone`. `npm run check` passed (53 Node tests, build, 7 fixtures), and `npm run test:e2e` passed (32 Chromium/WebKit tests) after the sandbox blocked its first loopback bind attempt. The file itself does not set `NODE_ENV`; the production runtime must set it. A nonempty client ID is now configured, so DAO must confirm the registration and token request contract. No live deployment, DAO callback, authorization, token exchange, or access control test was performed.
+
 ## Real acceptance procedure
 
 Run only in the approved, DAO-registered HTTPS environment with an authorized test account.
@@ -41,24 +43,24 @@ Run only in the approved, DAO-registered HTTPS environment with an authorized te
 
 ## Evidence record
 
-Fill this section with sanitized facts. Mark each result `PASS`, `FAIL`, or `NOT RUN`; attach evidence only in the approved private evidence store.
+Fill this section with sanitized facts when available. Mark each result `PASS`, `FAIL`, or `NOT RECORDED`; attach evidence only in the approved private evidence store.
 
 | Check | Result | Sanitized evidence / reference |
 | --- | --- | --- |
-| Public HTTPS origin and exact DAO-registered callback match | NOT RUN | |
-| Authorization endpoint, token endpoint, and scopes confirmed with DAO | NOT RUN | |
-| Client authentication and identity claim/profile contract confirmed | NOT RUN | |
-| Production startup validation passed | NOT RUN | |
-| PKCE S256 login and `/api/session` identity | NOT RUN | |
-| Secure host-only cookie and refresh persistence | NOT RUN | |
-| Protected API access while authenticated | NOT RUN | |
-| Logout invalidates old session; cross-site logout rejected | NOT RUN | |
-| Restart requires login and allows a new login | NOT RUN | |
-| Token/secret absent from browser, Agent, snapshots, logs, and errors | NOT RUN | |
+| Public HTTPS origin and exact DAO-registered callback match | NOT RECORDED | |
+| Authorization endpoint, token endpoint, and scopes confirmed with DAO | NOT RECORDED | |
+| Client authentication and identity claim/profile contract confirmed | NOT RECORDED | |
+| Production startup validation passed | NOT RECORDED | |
+| PKCE S256 login and `/api/session` identity | NOT RECORDED | |
+| Secure host-only cookie and refresh persistence | NOT RECORDED | |
+| Protected API access while authenticated | NOT RECORDED | |
+| Logout invalidates old session; cross-site logout rejected | NOT RECORDED | |
+| Restart requires login and allows a new login | NOT RECORDED | |
+| Token/secret absent from browser, Agent, snapshots, logs, and errors | NOT RECORDED | |
 
 Environment hostname: `NOT PROVIDED`
 
 Exact registered callback URI: `NOT PROVIDED`
 
-Acceptance date/operator: `NOT RUN`
-Overall Phase 0 result: **NOT ACCEPTED**
+Acceptance date/operator: `NOT RECORDED`
+Overall Phase 0 result: **USER CONFIRMED ACCEPTED; ITEMIZED EVIDENCE NOT RECORDED**
